@@ -7,7 +7,7 @@ class Booktoki implements Plugin.PluginBase {
   name = '북토끼 (Booktoki)';
   icon = 'src/kr/booktoki/icon.png';
   site = 'https://booktoki469.com';
-  version = '1.0.1';
+  version = '1.0.3';
   static url: string | undefined;
 
   async checkUrl() {
@@ -49,7 +49,43 @@ class Booktoki implements Plugin.PluginBase {
 
     const novels: Plugin.NovelItem[] = [];
 
-    loadedCheerio('ul#webtoon-list > li').each((i, el) => {
+    loadedCheerio('#webtoon-list li').each((i, el) => {
+      const name = loadedCheerio(el).find('.title').text().trim();
+      const cover = loadedCheerio(el).find('img').attr('src');
+      const novelUrl = loadedCheerio(el).find('a').attr('href');
+
+      if (name && novelUrl) {
+        novels.push({
+          name,
+          cover,
+          path: novelUrl.replace(`${Booktoki.url}/`, ''),
+        });
+      }
+    });
+
+    return novels;
+  }
+  // ... (skip parseNovel and parseChapter)
+  async searchNovels(
+    searchTerm: string,
+    pageNo: number,
+  ): Promise<Plugin.NovelItem[]> {
+    await this.checkUrl();
+    const url = `${Booktoki.url}/novel/p${pageNo}?stx=${encodeURIComponent(searchTerm)}`;
+
+    const res = await fetchApi(url, {
+      headers: {
+        'User-Agent':
+          'Mozilla/5.0 (Linux; Android 10; K) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Mobile Safari/537.36',
+        Referer: `${Booktoki.url}/`,
+      },
+    });
+    const body = await res.text();
+    const loadedCheerio = parseHTML(body);
+
+    const novels: Plugin.NovelItem[] = [];
+
+    loadedCheerio('#webtoon-list li').each((i, el) => {
       const name = loadedCheerio(el).find('.title').text().trim();
       const cover = loadedCheerio(el).find('img').attr('src');
       const novelUrl = loadedCheerio(el).find('a').attr('href');
@@ -149,42 +185,6 @@ class Booktoki implements Plugin.PluginBase {
     }
 
     return content || '본문을 불러올 수 없습니다. (웹뷰에서 확인해 주세요)';
-  }
-
-  async searchNovels(
-    searchTerm: string,
-    pageNo: number,
-  ): Promise<Plugin.NovelItem[]> {
-    await this.checkUrl();
-    const url = `${Booktoki.url}/novel/p${pageNo}?stx=${encodeURIComponent(searchTerm)}`;
-
-    const res = await fetchApi(url, {
-      headers: {
-        'User-Agent':
-          'Mozilla/5.0 (Linux; Android 10; K) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Mobile Safari/537.36',
-        Referer: `${Booktoki.url}/`,
-      },
-    });
-    const body = await res.text();
-    const loadedCheerio = parseHTML(body);
-
-    const novels: Plugin.NovelItem[] = [];
-
-    loadedCheerio('ul#webtoon-list > li').each((i, el) => {
-      const name = loadedCheerio(el).find('.title').text().trim();
-      const cover = loadedCheerio(el).find('img').attr('src');
-      const novelUrl = loadedCheerio(el).find('a').attr('href');
-
-      if (name && novelUrl) {
-        novels.push({
-          name,
-          cover,
-          path: novelUrl.replace(`${Booktoki.url}/`, ''),
-        });
-      }
-    });
-
-    return novels;
   }
 
   resolveUrl(path: string, isNovel?: boolean) {
