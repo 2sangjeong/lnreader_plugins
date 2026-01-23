@@ -7,7 +7,7 @@ class Booktoki implements Plugin.PluginBase {
   name = '북토끼 (Booktoki)';
   icon = 'src/kr/booktoki/icon.png';
   site = 'https://booktoki469.com';
-  version = '1.2.2';
+  version = '1.2.3';
   static url: string | undefined;
 
   async checkUrl() {
@@ -34,7 +34,7 @@ class Booktoki implements Plugin.PluginBase {
     }
   }
 
-  private getUserAgent(): string | undefined {
+  private getUserAgent(): string {
     try {
       // @ts-ignore
       const ua = navigator?.userAgent || global?.userAgent;
@@ -49,7 +49,7 @@ class Booktoki implements Plugin.PluginBase {
     } catch (e) {
       // ignore
     }
-    return undefined;
+    return 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/128.0.0.0 Whale/3.28.266.14 Safari/537.36';
   }
 
   private getHeaders() {
