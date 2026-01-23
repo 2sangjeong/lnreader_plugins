@@ -37,7 +37,13 @@ class Booktoki implements Plugin.PluginBase {
       ? `${Booktoki.url}/novel/p${pageNo}`
       : `${Booktoki.url}/novel?sst=wr_hit&sod=desc&page=${pageNo}`;
 
-    const res = await fetchApi(url);
+    const res = await fetchApi(url, {
+      headers: {
+        'User-Agent':
+          'Mozilla/5.0 (Linux; Android 10; K) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Mobile Safari/537.36',
+        Referer: `${Booktoki.url}/`,
+      },
+    });
     const body = await res.text();
     const loadedCheerio = parseHTML(body);
 
@@ -62,7 +68,13 @@ class Booktoki implements Plugin.PluginBase {
 
   async parseNovel(novelPath: string): Promise<Plugin.SourceNovel> {
     await this.checkUrl();
-    const res = await fetchApi(`${Booktoki.url}/${novelPath}`);
+    const res = await fetchApi(`${Booktoki.url}/${novelPath}`, {
+      headers: {
+        'User-Agent':
+          'Mozilla/5.0 (Linux; Android 10; K) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Mobile Safari/537.36',
+        Referer: `${Booktoki.url}/`,
+      },
+    });
     const body = await res.text();
     const loadedCheerio = parseHTML(body);
 
@@ -110,7 +122,13 @@ class Booktoki implements Plugin.PluginBase {
 
   async parseChapter(chapterPath: string): Promise<string> {
     await this.checkUrl();
-    const res = await fetchApi(`${Booktoki.url}/${chapterPath}`);
+    const res = await fetchApi(`${Booktoki.url}/${chapterPath}`, {
+      headers: {
+        'User-Agent':
+          'Mozilla/5.0 (Linux; Android 10; K) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Mobile Safari/537.36',
+        Referer: `${Booktoki.url}/`,
+      },
+    });
     const body = await res.text();
     const loadedCheerio = parseHTML(body);
 
@@ -140,7 +158,13 @@ class Booktoki implements Plugin.PluginBase {
     await this.checkUrl();
     const url = `${Booktoki.url}/novel/p${pageNo}?stx=${encodeURIComponent(searchTerm)}`;
 
-    const res = await fetchApi(url);
+    const res = await fetchApi(url, {
+      headers: {
+        'User-Agent':
+          'Mozilla/5.0 (Linux; Android 10; K) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Mobile Safari/537.36',
+        Referer: `${Booktoki.url}/`,
+      },
+    });
     const body = await res.text();
     const loadedCheerio = parseHTML(body);
 
