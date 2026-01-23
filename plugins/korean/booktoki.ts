@@ -7,17 +7,18 @@ class Booktoki implements Plugin.PluginBase {
   name = '북토끼 (Booktoki)';
   icon = 'src/kr/booktoki/icon.png';
   site = 'https://booktoki469.com';
-  version = '1.2.3';
+  version = '1.2.4';
   static url: string | undefined;
 
   async checkUrl() {
     if (!Booktoki.url) {
       try {
-        const res = await fetchApi(this.site);
-        if (res.ok) {
+        // Try with current site
+        const res = await fetchApi(this.site, { redirect: 'follow' });
+        if (res.ok && !res.url.includes('survey-smiles.com')) {
           Booktoki.url = res.url.replace(/\/$/, '');
         } else {
-          // Fallback to static domain if main site is blocked/redirecting
+          // Fallback to static domain list if blocked or redirected to trap
           const domainRes = await fetchApi(
             'https://stevenyomi.github.io/source-domains/newtoki.txt',
           );
@@ -49,17 +50,18 @@ class Booktoki implements Plugin.PluginBase {
     } catch (e) {
       // ignore
     }
-    return 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/128.0.0.0 Whale/3.28.266.14 Safari/537.36';
+    // Latest Chrome 131 for Windows - Highest reliability for Desktops
+    return 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36';
   }
 
   private getHeaders() {
     const headers: Record<string, string> = {
       'Referer': `${Booktoki.url}/`,
+      'Accept':
+        'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8',
+      'Accept-Language': 'ko-KR,ko;q=0.9,en-US;q=0.8,en;q=0.7',
     };
-    const ua = this.getUserAgent();
-    if (ua) {
-      headers['User-Agent'] = ua;
-    }
+    headers['User-Agent'] = this.getUserAgent();
     return headers;
   }
 
@@ -74,9 +76,9 @@ class Booktoki implements Plugin.PluginBase {
       body.includes('Cloudflare') ||
       body.includes('Just a moment...')
     ) {
-      const ua = this.getUserAgent() || 'App Default';
+      const ua = this.getUserAgent();
       throw new Error(
-        `Cloudflare 차단됨 (${res.status}): 웹뷰(WebView)에서 사이트를 열어 '사람임을 확인'해 주세요.\n현재 UA: ${ua}\n팁: 웹뷰 접속 시 이 UA가 브라우저와 일치해야 합니다.`,
+        `차단됨 (${res.status}): 웹뷰(WebView)에서 북토끼 접속 후 '사람임을 확인' 하시면 정상 작동합니다.\n\n[중요] 세션 동기화를 위해 아래 값을 '앱 설정 -> 브라우저 -> User-Agent'에 똑같이 입력해 주세요:\n${ua}`,
       );
     }
     return { res, body };
@@ -96,7 +98,6 @@ class Booktoki implements Plugin.PluginBase {
   ): Promise<Plugin.NovelItem[]> {
     await this.checkUrl();
 
-    // Attempt subpage first, fallback to home page only for page 1
     const url = showLatestNovels
       ? `${Booktoki.url}/novel/p${pageNo}`
       : `${Booktoki.url}/novel?sst=wr_hit&sod=desc&page=${pageNo}`;
@@ -106,7 +107,7 @@ class Booktoki implements Plugin.PluginBase {
       data = await this.fetchPage(url);
     } catch (e) {
       if (pageNo === 1) {
-        // Try fallback to homepage if subpage is blocked
+        // Fallback to home page update list if subpage is blocked
         data = await this.fetchPage(`${Booktoki.url}`);
       } else {
         throw e;
