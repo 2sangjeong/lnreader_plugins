@@ -7,7 +7,7 @@ class Booktoki implements Plugin.PluginBase {
   name = '북토끼 (Booktoki)';
   icon = 'src/kr/booktoki/icon.png';
   site = 'https://booktoki469.com';
-  version = '1.2.1';
+  version = '1.2.2';
   static url: string | undefined;
 
   async checkUrl() {
@@ -17,6 +17,7 @@ class Booktoki implements Plugin.PluginBase {
         if (res.ok) {
           Booktoki.url = res.url.replace(/\/$/, '');
         } else {
+          // Fallback to static domain if main site is blocked/redirecting
           const domainRes = await fetchApi(
             'https://stevenyomi.github.io/source-domains/newtoki.txt',
           );
@@ -33,7 +34,7 @@ class Booktoki implements Plugin.PluginBase {
     }
   }
 
-  private getUserAgent(): string {
+  private getUserAgent(): string | undefined {
     try {
       // @ts-ignore
       const ua = navigator?.userAgent || global?.userAgent;
@@ -48,15 +49,12 @@ class Booktoki implements Plugin.PluginBase {
     } catch (e) {
       // ignore
     }
-    return 'Mozilla/5.0 (Linux; Android 14) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/127.0.6533.103 Mobile Safari/537.36';
+    return undefined;
   }
 
   private getHeaders() {
     const headers: Record<string, string> = {
       'Referer': `${Booktoki.url}/`,
-      'Accept':
-        'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8',
-      'Accept-Language': 'ko-KR,ko;q=0.9,en-US;q=0.8,en;q=0.7',
     };
     const ua = this.getUserAgent();
     if (ua) {
@@ -73,10 +71,12 @@ class Booktoki implements Plugin.PluginBase {
       res.status === 403 ||
       res.status === 503 ||
       body.includes('challenge-platform') ||
-      body.includes('Cloudflare')
+      body.includes('Cloudflare') ||
+      body.includes('Just a moment...')
     ) {
+      const ua = this.getUserAgent() || 'App Default';
       throw new Error(
-        `Cloudflare 차단됨 (${res.status}): 웹뷰(WebView)에서 사이트를 열어 사람임을 확인해 주세요.\nUA: ${this.getUserAgent()}`,
+        `Cloudflare 차단됨 (${res.status}): 웹뷰(WebView)에서 사이트를 열어 '사람임을 확인'해 주세요.\n현재 UA: ${ua}\n팁: 웹뷰 접속 시 이 UA가 브라우저와 일치해야 합니다.`,
       );
     }
     return { res, body };
@@ -95,14 +95,28 @@ class Booktoki implements Plugin.PluginBase {
     { showLatestNovels }: Plugin.PopularNovelsOptions,
   ): Promise<Plugin.NovelItem[]> {
     await this.checkUrl();
+
+    // Attempt subpage first, fallback to home page only for page 1
     const url = showLatestNovels
       ? `${Booktoki.url}/novel/p${pageNo}`
       : `${Booktoki.url}/novel?sst=wr_hit&sod=desc&page=${pageNo}`;
 
-    const { body } = await this.fetchPage(url);
-    const loadedCheerio = parseHTML(body);
+    let data;
+    try {
+      data = await this.fetchPage(url);
+    } catch (e) {
+      if (pageNo === 1) {
+        // Try fallback to homepage if subpage is blocked
+        data = await this.fetchPage(`${Booktoki.url}`);
+      } else {
+        throw e;
+      }
+    }
+
+    const loadedCheerio = parseHTML(data.body);
     const novels: Plugin.NovelItem[] = [];
 
+    // Selector for /novel list
     loadedCheerio('#webtoon-list li').each((i, el) => {
       const name = loadedCheerio(el).find('.title').text().trim();
       const cover = loadedCheerio(el).find('img').attr('src');
@@ -116,6 +130,28 @@ class Booktoki implements Plugin.PluginBase {
         });
       }
     });
+
+    // Fallback: Selector for home page (Update section)
+    if (novels.length === 0) {
+      loadedCheerio('.post-row').each((i, el) => {
+        const name = loadedCheerio(el)
+          .find('.in-subject')
+          .text()
+          .trim()
+          .replace(/^\+\d+/, '')
+          .trim();
+        const cover = loadedCheerio(el).find('img').attr('src');
+        const novelUrl = loadedCheerio(el).find('a').attr('href');
+
+        if (name && novelUrl && novelUrl.includes('/novel/')) {
+          novels.push({
+            name,
+            cover,
+            path: novelUrl.replace(`${Booktoki.url}/`, ''),
+          });
+        }
+      });
+    }
 
     if (novels.length === 0) {
       throw new Error('소설 목록을 불러올 수 없습니다. (웹뷰에서 확인 필요)');
