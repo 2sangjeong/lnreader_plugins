@@ -7,7 +7,7 @@ class Booktoki implements Plugin.PluginBase {
   name = '북토끼 (Booktoki)';
   icon = 'src/kr/booktoki/icon.png';
   site = 'https://booktoki469.com';
-  version = '1.0.4';
+  version = '1.0.5';
   static url: string | undefined;
 
   async checkUrl() {
@@ -39,8 +39,6 @@ class Booktoki implements Plugin.PluginBase {
 
     const res = await fetchApi(url, {
       headers: {
-        'User-Agent':
-          'Mozilla/5.0 (Linux; Android 10; K) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Mobile Safari/537.36',
         Referer: `${Booktoki.url}/`,
       },
     });
@@ -82,8 +80,6 @@ class Booktoki implements Plugin.PluginBase {
 
     const res = await fetchApi(url, {
       headers: {
-        'User-Agent':
-          'Mozilla/5.0 (Linux; Android 10; K) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Mobile Safari/537.36',
         Referer: `${Booktoki.url}/`,
       },
     });
@@ -120,8 +116,6 @@ class Booktoki implements Plugin.PluginBase {
     await this.checkUrl();
     const res = await fetchApi(`${Booktoki.url}/${novelPath}`, {
       headers: {
-        'User-Agent':
-          'Mozilla/5.0 (Linux; Android 10; K) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Mobile Safari/537.36',
         Referer: `${Booktoki.url}/`,
       },
     });
@@ -174,8 +168,6 @@ class Booktoki implements Plugin.PluginBase {
     await this.checkUrl();
     const res = await fetchApi(`${Booktoki.url}/${chapterPath}`, {
       headers: {
-        'User-Agent':
-          'Mozilla/5.0 (Linux; Android 10; K) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Mobile Safari/537.36',
         Referer: `${Booktoki.url}/`,
       },
     });
