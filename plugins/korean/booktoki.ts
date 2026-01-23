@@ -7,7 +7,7 @@ class Booktoki implements Plugin.PluginBase {
   name = '북토끼 (Booktoki)';
   icon = 'src/kr/booktoki/icon.png';
   site = 'https://booktoki469.com';
-  version = '1.0.5';
+  version = '1.0.6';
   static url: string | undefined;
 
   async checkUrl() {
@@ -63,8 +63,14 @@ class Booktoki implements Plugin.PluginBase {
 
     if (novels.length === 0) {
       const title = loadedCheerio('title').text().trim();
+      let ua = 'Unknown';
+      try {
+        ua = navigator.userAgent;
+      } catch (e) {
+        ua = 'navigator undefined';
+      }
       throw new Error(
-        `NoNovelsFound: ${title} | ${url} | ${body.trim().substring(0, 100)}`,
+        `NoNovelsFound: ${title} | ${url} | UA: ${ua} | ${body.trim().substring(0, 100)}`,
       );
     }
 
@@ -104,8 +110,14 @@ class Booktoki implements Plugin.PluginBase {
 
     if (novels.length === 0) {
       const title = loadedCheerio('title').text().trim();
+      let ua = 'Unknown';
+      try {
+        ua = navigator.userAgent;
+      } catch (e) {
+        ua = 'navigator undefined';
+      }
       throw new Error(
-        `NoNovelsFound: ${title} | ${url} | ${body.trim().substring(0, 100)}`,
+        `NoNovelsFound: ${title} | ${url} | UA: ${ua} | ${body.trim().substring(0, 100)}`,
       );
     }
 
