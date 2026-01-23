@@ -7,7 +7,7 @@ class Booktoki implements Plugin.PluginBase {
   name = '북토끼 (Booktoki)';
   icon = 'src/kr/booktoki/icon.png';
   site = 'https://booktoki469.com';
-  version = '1.1.4';
+  version = '1.1.5';
   static url: string | undefined;
 
   async checkUrl() {
@@ -46,12 +46,24 @@ class Booktoki implements Plugin.PluginBase {
     return 'Mozilla/5.0 (Linux; Android 14) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/127.0.6533.103 Mobile Safari/537.36';
   }
 
+  private decodeHtmlData(encoded: string): string {
+    let result = '';
+    for (let i = 0; i < encoded.length; i += 3) {
+      result += String.fromCharCode(parseInt(encoded.substring(i, i + 2), 16));
+    }
+    return result;
+  }
+
   private getHeaders() {
     const headers: Record<string, string> = {
       'Referer': `${Booktoki.url}/`,
       'Accept':
         'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8,application/signed-exchange;v=b3;q=0.7',
       'Accept-Language': 'ko-KR,ko;q=0.9,en-US;q=0.8,en;q=0.7',
+      'Sec-Ch-Ua':
+        '"Not)A;Brand";v="99", "Google Chrome";v="127", "Chromium";v="127"',
+      'Sec-Ch-Ua-Mobile': '?1',
+      'Sec-Ch-Ua-Platform': '"Android"',
       'Sec-Fetch-Dest': 'document',
       'Sec-Fetch-Mode': 'navigate',
       'Sec-Fetch-Site': 'same-origin',
@@ -205,8 +217,30 @@ class Booktoki implements Plugin.PluginBase {
     const body = await res.text();
     const loadedCheerio = parseHTML(body);
 
-    // Extracting novel content
-    // Based on user request, it's usually .view-content or #novel_content
+    // Check for html_data encoded content (ManaTokiTrap logic)
+    const scripts = loadedCheerio('script').toArray();
+    let decodedContent = '';
+    for (const script of scripts) {
+      const scriptContent = loadedCheerio(script).html() || '';
+      if (scriptContent.includes('var html_data')) {
+        const regex = /html_data\+='(.*?)';/g;
+        let match;
+        let combined = '';
+        while ((match = regex.exec(scriptContent)) !== null) {
+          combined += match[1];
+        }
+        if (combined) {
+          decodedContent = this.decodeHtmlData(combined);
+          break;
+        }
+      }
+    }
+
+    if (decodedContent) {
+      return decodedContent;
+    }
+
+    // Extracting novel content (fallback)
     let content = loadedCheerio('#novel_content').html() || '';
     if (!content) {
       content = loadedCheerio('.view-content').html() || '';
