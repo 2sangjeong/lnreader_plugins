@@ -7,7 +7,7 @@ class Booktoki implements Plugin.PluginBase {
   name = '북토끼 (Booktoki)';
   icon = 'src/kr/booktoki/icon.png';
   site = 'https://booktoki469.com';
-  version = '1.1.5';
+  version = '1.1.6';
   static url: string | undefined;
 
   async checkUrl() {
@@ -59,7 +59,11 @@ class Booktoki implements Plugin.PluginBase {
       'Referer': `${Booktoki.url}/`,
       'Accept':
         'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8,application/signed-exchange;v=b3;q=0.7',
-      'Accept-Language': 'ko-KR,ko;q=0.9,en-US;q=0.8,en;q=0.7',
+      'Accept-Language':
+        'ko-KR,ko;q=0.9,en-US;q=0.8,en;q=0.7,zh-CN;q=0.6,zh;q=0.5',
+      'Cache-Control': 'max-age=0',
+      'If-Modified-Since': 'Fri, 23 Aug 2024 15:04:03 GMT',
+      'Priority': 'u=0, i',
       'Sec-Ch-Ua':
         '"Not)A;Brand";v="99", "Google Chrome";v="127", "Chromium";v="127"',
       'Sec-Ch-Ua-Mobile': '?1',
@@ -236,14 +240,13 @@ class Booktoki implements Plugin.PluginBase {
       }
     }
 
-    if (decodedContent) {
-      return decodedContent;
-    }
-
-    // Extracting novel content (fallback)
-    let content = loadedCheerio('#novel_content').html() || '';
+    let content = decodedContent;
     if (!content) {
-      content = loadedCheerio('.view-content').html() || '';
+      // Extracting novel content (fallback)
+      content = loadedCheerio('#novel_content').html() || '';
+      if (!content) {
+        content = loadedCheerio('.view-content').html() || '';
+      }
     }
 
     if (content) {
