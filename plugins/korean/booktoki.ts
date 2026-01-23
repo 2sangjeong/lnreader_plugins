@@ -7,7 +7,7 @@ class Booktoki implements Plugin.PluginBase {
   name = '북토끼 (Booktoki)';
   icon = 'src/kr/booktoki/icon.png';
   site = 'https://booktoki469.com';
-  version = '1.1.2';
+  version = '1.1.3';
   static url: string | undefined;
 
   async checkUrl() {
@@ -28,17 +28,22 @@ class Booktoki implements Plugin.PluginBase {
     }
   }
 
-  private getUserAgent(): string | undefined {
+  private getUserAgent(): string {
     try {
       // @ts-ignore
       const ua = navigator?.userAgent || global?.userAgent;
-      if (ua && ua !== 'undefined' && ua !== 'null') {
+      if (
+        ua &&
+        ua !== 'undefined' &&
+        ua !== 'null' &&
+        !ua.includes('undefined')
+      ) {
         return ua;
       }
     } catch (e) {
       // ignore
     }
-    return undefined;
+    return 'Mozilla/5.0 (Linux; Android 14) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/127.0.6533.103 Mobile Safari/537.36';
   }
 
   private getHeaders() {
@@ -93,7 +98,7 @@ class Booktoki implements Plugin.PluginBase {
 
     if (novels.length === 0) {
       const title = loadedCheerio('title').text().trim();
-      const ua = this.getUserAgent() || 'App Default';
+      const ua = this.getUserAgent();
       throw new Error(
         `NoNovelsFound: ${title} | ${url} | UA: ${ua} | ${body.trim().substring(0, 100)}`,
       );
@@ -133,7 +138,7 @@ class Booktoki implements Plugin.PluginBase {
 
     if (novels.length === 0) {
       const title = loadedCheerio('title').text().trim();
-      const ua = this.getUserAgent() || 'App Default';
+      const ua = this.getUserAgent();
       throw new Error(
         `NoNovelsFound: ${title} | ${url} | UA: ${ua} | ${body.trim().substring(0, 100)}`,
       );
