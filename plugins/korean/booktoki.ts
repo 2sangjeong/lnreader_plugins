@@ -7,7 +7,7 @@ class Booktoki implements Plugin.PluginBase {
   name = '북토끼 (Booktoki)';
   icon = 'src/kr/booktoki/icon.png';
   site = 'https://booktoki469.com';
-  version = '1.0.3';
+  version = '1.0.4';
   static url: string | undefined;
 
   async checkUrl() {
@@ -63,9 +63,16 @@ class Booktoki implements Plugin.PluginBase {
       }
     });
 
+    if (novels.length === 0) {
+      const title = loadedCheerio('title').text().trim();
+      throw new Error(
+        `NoNovelsFound: ${title} | ${url} | ${body.trim().substring(0, 100)}`,
+      );
+    }
+
     return novels;
   }
-  // ... (skip parseNovel and parseChapter)
+
   async searchNovels(
     searchTerm: string,
     pageNo: number,
@@ -98,6 +105,13 @@ class Booktoki implements Plugin.PluginBase {
         });
       }
     });
+
+    if (novels.length === 0) {
+      const title = loadedCheerio('title').text().trim();
+      throw new Error(
+        `NoNovelsFound: ${title} | ${url} | ${body.trim().substring(0, 100)}`,
+      );
+    }
 
     return novels;
   }
