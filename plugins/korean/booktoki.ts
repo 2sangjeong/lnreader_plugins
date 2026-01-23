@@ -7,7 +7,7 @@ class Booktoki implements Plugin.PluginBase {
   name = '북토끼 (Booktoki)';
   icon = 'src/kr/booktoki/icon.png';
   site = 'https://booktoki469.com';
-  version = '1.1.0';
+  version = '1.1.1';
   static url: string | undefined;
 
   async checkUrl() {
@@ -28,28 +28,30 @@ class Booktoki implements Plugin.PluginBase {
     }
   }
 
-  private getUserAgent(): string {
-    let ua: string | undefined;
+  private getUserAgent(): string | undefined {
     try {
-      ua = (navigator as any)?.userAgent;
+      const ua = navigator.userAgent;
+      if (ua && ua !== 'undefined' && !ua.includes('undefined')) {
+        return ua;
+      }
     } catch (e) {
       // ignore
     }
-    if (!ua || ua === 'undefined' || ua.includes('undefined')) {
-      ua =
-        'Mozilla/5.0 (Linux; Android 10; K) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0.0.0 Mobile Safari/537.36';
-    }
-    return ua;
+    return undefined;
   }
 
   private getHeaders() {
-    return {
-      'User-Agent': this.getUserAgent(),
+    const headers: Record<string, string> = {
       'Referer': `${Booktoki.url}/`,
       'Accept':
         'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8,application/signed-exchange;v=b3;q=0.7',
       'Accept-Language': 'ko-KR,ko;q=0.9,en-US;q=0.8,en;q=0.7',
     };
+    const ua = this.getUserAgent();
+    if (ua) {
+      headers['User-Agent'] = ua;
+    }
+    return headers;
   }
 
   async popularNovels(
@@ -85,7 +87,7 @@ class Booktoki implements Plugin.PluginBase {
 
     if (novels.length === 0) {
       const title = loadedCheerio('title').text().trim();
-      const ua = this.getUserAgent();
+      const ua = this.getUserAgent() || 'System Default';
       throw new Error(
         `NoNovelsFound: ${title} | ${url} | UA: ${ua} | ${body.trim().substring(0, 100)}`,
       );
@@ -125,7 +127,7 @@ class Booktoki implements Plugin.PluginBase {
 
     if (novels.length === 0) {
       const title = loadedCheerio('title').text().trim();
-      const ua = this.getUserAgent();
+      const ua = this.getUserAgent() || 'System Default';
       throw new Error(
         `NoNovelsFound: ${title} | ${url} | UA: ${ua} | ${body.trim().substring(0, 100)}`,
       );
