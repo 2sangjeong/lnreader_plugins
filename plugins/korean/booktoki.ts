@@ -7,20 +7,24 @@ class Booktoki implements Plugin.PluginBase {
   name = '북토끼 (Booktoki)';
   icon = 'src/kr/booktoki/icon.png';
   site = 'https://booktoki469.com';
-  version = '1.1.7';
+  version = '1.1.8';
   static url: string | undefined;
 
   async checkUrl() {
     if (!Booktoki.url) {
       try {
-        const domainRes = await fetchApi(
-          'https://stevenyomi.github.io/source-domains/newtoki.txt',
-        );
-        const domainNumber = (await domainRes.text()).trim();
-        if (domainNumber) {
-          Booktoki.url = `https://booktoki${domainNumber}.com`;
+        const res = await fetchApi(this.site);
+        if (res.ok) {
+          Booktoki.url = res.url.replace(/\/$/, '');
         } else {
-          Booktoki.url = this.site;
+          // Fallback to domain list if primary site is down
+          const domainRes = await fetchApi(
+            'https://stevenyomi.github.io/source-domains/newtoki.txt',
+          );
+          const domainNumber = (await domainRes.text()).trim();
+          Booktoki.url = domainNumber
+            ? `https://booktoki${domainNumber}.com`
+            : this.site;
         }
       } catch (e) {
         Booktoki.url = this.site;
@@ -59,20 +63,7 @@ class Booktoki implements Plugin.PluginBase {
       'Referer': `${Booktoki.url}/`,
       'Accept':
         'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8,application/signed-exchange;v=b3;q=0.7',
-      'Accept-Language':
-        'ko-KR,ko;q=0.9,en-US;q=0.8,en;q=0.7,zh-CN;q=0.6,zh;q=0.5',
-      'Cache-Control': 'max-age=0',
-      'If-Modified-Since': 'Fri, 23 Aug 2024 15:04:03 GMT',
-      'Priority': 'u=0, i',
-      'Sec-Ch-Ua':
-        '"Not)A;Brand";v="99", "Google Chrome";v="127", "Chromium";v="127"',
-      'Sec-Ch-Ua-Mobile': '?1',
-      'Sec-Ch-Ua-Platform': '"Android"',
-      'Sec-Fetch-Dest': 'document',
-      'Sec-Fetch-Mode': 'navigate',
-      'Sec-Fetch-Site': 'same-origin',
-      'Sec-Fetch-User': '?1',
-      'Upgrade-Insecure-Requests': '1',
+      'Accept-Language': 'ko-KR,ko;q=0.9,en-US;q=0.8,en;q=0.7',
     };
     const ua = this.getUserAgent();
     if (ua) {
@@ -114,9 +105,13 @@ class Booktoki implements Plugin.PluginBase {
 
     if (novels.length === 0) {
       const title = loadedCheerio('title').text().trim();
-      const ua = this.getUserAgent();
+      if (body.includes('challenge-platform') || title.includes('Cloudflare')) {
+        throw new Error(
+          'Cloudflare 차단됨: 웹뷰(WebView)에서 사이트를 열어 사람임을 확인해 주세요.',
+        );
+      }
       throw new Error(
-        `NoNovelsFound: ${title} | ${url} | UA: ${ua} | ${body.trim().substring(0, 100)}`,
+        `소설을 찾을 수 없습니다: ${title} | UA: ${this.getUserAgent()}`,
       );
     }
 
@@ -154,9 +149,13 @@ class Booktoki implements Plugin.PluginBase {
 
     if (novels.length === 0) {
       const title = loadedCheerio('title').text().trim();
-      const ua = this.getUserAgent();
+      if (body.includes('challenge-platform') || title.includes('Cloudflare')) {
+        throw new Error(
+          'Cloudflare 차단됨: 웹뷰(WebView)에서 사이트를 열어 사람임을 확인해 주세요.',
+        );
+      }
       throw new Error(
-        `NoNovelsFound: ${title} | ${url} | UA: ${ua} | ${body.trim().substring(0, 100)}`,
+        `검색 결과를 찾을 수 없습니다: ${title} | UA: ${this.getUserAgent()}`,
       );
     }
 
