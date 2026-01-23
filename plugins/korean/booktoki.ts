@@ -7,7 +7,7 @@ class Booktoki implements Plugin.PluginBase {
   name = '북토끼 (Booktoki)';
   icon = 'src/kr/booktoki/icon.png';
   site = 'https://booktoki469.com';
-  version = '1.1.6';
+  version = '1.1.7';
   static url: string | undefined;
 
   async checkUrl() {
@@ -250,12 +250,29 @@ class Booktoki implements Plugin.PluginBase {
     }
 
     if (content) {
-      // Remove scripts and other unnecessary tags
-      const contentCheerio = parseHTML(content);
-      contentCheerio('script').remove();
-      contentCheerio('div[style*="display:none"]').remove();
-      contentCheerio('div[style*="font-size:0"]').remove();
-      content = contentCheerio.html() || '';
+      // Remove scripts and noise (Trap)
+      const $ = parseHTML(content);
+      $('script, style, iframe, ins').remove();
+      $('[style*="display:none"], [style*="display: none"]').remove();
+      $('[style*="font-size:0"], [style*="font-size: 0"]').remove();
+      $('[style*="visibility:hidden"], [style*="visibility: hidden"]').remove();
+      $('[style*="opacity:0"], [style*="opacity: 0"]').remove();
+      $('[style*="height:0"], [style*="height:0px"]').remove();
+      $('[style*="width:0"], [style*="width:0px"]').remove();
+      $('[style*="overflow:hidden"]').remove();
+
+      // Common noise selectors
+      $('div, span').each((i, el) => {
+        const style = $(el).attr('style');
+        if (
+          style &&
+          (style.includes('font-size:0') || style.includes('display:none'))
+        ) {
+          $(el).remove();
+        }
+      });
+
+      content = $.html() || '';
     }
 
     return content || '본문을 불러올 수 없습니다. (웹뷰에서 확인해 주세요)';
