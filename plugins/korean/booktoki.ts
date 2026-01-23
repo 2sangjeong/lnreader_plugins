@@ -7,7 +7,7 @@ class Booktoki implements Plugin.PluginBase {
   name = '북토끼 (Booktoki)';
   icon = 'src/kr/booktoki/icon.png';
   site = 'https://booktoki469.com';
-  version = '1.2.0';
+  version = '1.2.1';
   static url: string | undefined;
 
   async checkUrl() {
@@ -51,14 +51,6 @@ class Booktoki implements Plugin.PluginBase {
     return 'Mozilla/5.0 (Linux; Android 14) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/127.0.6533.103 Mobile Safari/537.36';
   }
 
-  private decodeHtmlData(encoded: string): string {
-    let result = '';
-    for (let i = 0; i < encoded.length; i += 3) {
-      result += String.fromCharCode(parseInt(encoded.substring(i, i + 2), 16));
-    }
-    return result;
-  }
-
   private getHeaders() {
     const headers: Record<string, string> = {
       'Referer': `${Booktoki.url}/`,
@@ -73,6 +65,31 @@ class Booktoki implements Plugin.PluginBase {
     return headers;
   }
 
+  private async fetchPage(url: string) {
+    const res = await fetchApi(url, { headers: this.getHeaders() });
+    const body = await res.text();
+
+    if (
+      res.status === 403 ||
+      res.status === 503 ||
+      body.includes('challenge-platform') ||
+      body.includes('Cloudflare')
+    ) {
+      throw new Error(
+        `Cloudflare 차단됨 (${res.status}): 웹뷰(WebView)에서 사이트를 열어 사람임을 확인해 주세요.\nUA: ${this.getUserAgent()}`,
+      );
+    }
+    return { res, body };
+  }
+
+  private decodeHtmlData(encoded: string): string {
+    let result = '';
+    for (let i = 0; i < encoded.length; i += 3) {
+      result += String.fromCharCode(parseInt(encoded.substring(i, i + 2), 16));
+    }
+    return result;
+  }
+
   async popularNovels(
     pageNo: number,
     { showLatestNovels }: Plugin.PopularNovelsOptions,
@@ -82,17 +99,7 @@ class Booktoki implements Plugin.PluginBase {
       ? `${Booktoki.url}/novel/p${pageNo}`
       : `${Booktoki.url}/novel?sst=wr_hit&sod=desc&page=${pageNo}`;
 
-    const res = await fetchApi(url, {
-      headers: this.getHeaders(),
-    });
-
-    if (res.status === 403 || res.status === 503) {
-      throw new Error(
-        `접근 거부됨 (${res.status}): 웹뷰(WebView)에서 사이트를 열어 Cloudflare 확인을 완료해 주세요.`,
-      );
-    }
-
-    const body = await res.text();
+    const { body } = await this.fetchPage(url);
     const loadedCheerio = parseHTML(body);
     const novels: Plugin.NovelItem[] = [];
 
@@ -111,15 +118,7 @@ class Booktoki implements Plugin.PluginBase {
     });
 
     if (novels.length === 0) {
-      const title = loadedCheerio('title').text().trim();
-      if (body.includes('challenge-platform') || title.includes('Cloudflare')) {
-        throw new Error(
-          'Cloudflare 차단됨: 웹뷰(WebView)에서 사이트를 열어 사람임을 확인해 주세요.',
-        );
-      }
-      throw new Error(
-        `목록을 불러올 수 없습니다. (웹뷰 확인 필요) | Title: ${title}`,
-      );
+      throw new Error('소설 목록을 불러올 수 없습니다. (웹뷰에서 확인 필요)');
     }
     return novels;
   }
@@ -131,17 +130,7 @@ class Booktoki implements Plugin.PluginBase {
     await this.checkUrl();
     const url = `${Booktoki.url}/novel/p${pageNo}?stx=${encodeURIComponent(searchTerm)}`;
 
-    const res = await fetchApi(url, {
-      headers: this.getHeaders(),
-    });
-
-    if (res.status === 403 || res.status === 503) {
-      throw new Error(
-        `접근 거부됨 (${res.status}): 웹뷰(WebView)에서 사이트를 열어 Cloudflare 확인을 완료해 주세요.`,
-      );
-    }
-
-    const body = await res.text();
+    const { body } = await this.fetchPage(url);
     const loadedCheerio = parseHTML(body);
     const novels: Plugin.NovelItem[] = [];
 
@@ -160,32 +149,14 @@ class Booktoki implements Plugin.PluginBase {
     });
 
     if (novels.length === 0) {
-      const title = loadedCheerio('title').text().trim();
-      if (body.includes('challenge-platform') || title.includes('Cloudflare')) {
-        throw new Error(
-          'Cloudflare 차단됨: 웹뷰(WebView)에서 사이트를 열어 사람임을 확인해 주세요.',
-        );
-      }
-      throw new Error(
-        `검색 결과를 불러올 수 없습니다. (웹뷰 확인 필요) | Title: ${title}`,
-      );
+      throw new Error('검색 결과를 불러올 수 없습니다. (웹뷰에서 확인 필요)');
     }
     return novels;
   }
 
   async parseNovel(novelPath: string): Promise<Plugin.SourceNovel> {
     await this.checkUrl();
-    const res = await fetchApi(`${Booktoki.url}/${novelPath}`, {
-      headers: this.getHeaders(),
-    });
-
-    if (res.status === 403 || res.status === 503) {
-      throw new Error(
-        `접근 거부됨 (${res.status}): 웹뷰에서 Cloudflare를 확인해 주세요.`,
-      );
-    }
-
-    const body = await res.text();
+    const { body } = await this.fetchPage(`${Booktoki.url}/${novelPath}`);
     const loadedCheerio = parseHTML(body);
 
     const novel: Plugin.SourceNovel = {
@@ -232,17 +203,7 @@ class Booktoki implements Plugin.PluginBase {
 
   async parseChapter(chapterPath: string): Promise<string> {
     await this.checkUrl();
-    const res = await fetchApi(`${Booktoki.url}/${chapterPath}`, {
-      headers: this.getHeaders(),
-    });
-
-    if (res.status === 403 || res.status === 503) {
-      throw new Error(
-        `접근 거부됨 (${res.status}): 웹뷰에서 Cloudflare를 확인해 주세요.`,
-      );
-    }
-
-    const body = await res.text();
+    const { body } = await this.fetchPage(`${Booktoki.url}/${chapterPath}`);
     const loadedCheerio = parseHTML(body);
 
     const scripts = loadedCheerio('script').toArray();
