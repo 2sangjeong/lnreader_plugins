@@ -7,7 +7,7 @@ class Booktoki implements Plugin.PluginBase {
   name = '북토끼 (Booktoki)';
   icon = 'src/kr/booktoki/icon.png';
   site = 'https://booktoki469.com';
-  version = '1.1.8';
+  version = '1.2.0';
   static url: string | undefined;
 
   async checkUrl() {
@@ -17,14 +17,15 @@ class Booktoki implements Plugin.PluginBase {
         if (res.ok) {
           Booktoki.url = res.url.replace(/\/$/, '');
         } else {
-          // Fallback to domain list if primary site is down
           const domainRes = await fetchApi(
             'https://stevenyomi.github.io/source-domains/newtoki.txt',
           );
           const domainNumber = (await domainRes.text()).trim();
-          Booktoki.url = domainNumber
-            ? `https://booktoki${domainNumber}.com`
-            : this.site;
+          if (domainNumber && !isNaN(Number(domainNumber))) {
+            Booktoki.url = `https://booktoki${domainNumber}.com`;
+          } else {
+            Booktoki.url = this.site;
+          }
         }
       } catch (e) {
         Booktoki.url = this.site;
@@ -62,7 +63,7 @@ class Booktoki implements Plugin.PluginBase {
     const headers: Record<string, string> = {
       'Referer': `${Booktoki.url}/`,
       'Accept':
-        'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8,application/signed-exchange;v=b3;q=0.7',
+        'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8',
       'Accept-Language': 'ko-KR,ko;q=0.9,en-US;q=0.8,en;q=0.7',
     };
     const ua = this.getUserAgent();
@@ -84,9 +85,15 @@ class Booktoki implements Plugin.PluginBase {
     const res = await fetchApi(url, {
       headers: this.getHeaders(),
     });
+
+    if (res.status === 403 || res.status === 503) {
+      throw new Error(
+        `접근 거부됨 (${res.status}): 웹뷰(WebView)에서 사이트를 열어 Cloudflare 확인을 완료해 주세요.`,
+      );
+    }
+
     const body = await res.text();
     const loadedCheerio = parseHTML(body);
-
     const novels: Plugin.NovelItem[] = [];
 
     loadedCheerio('#webtoon-list li').each((i, el) => {
@@ -111,10 +118,9 @@ class Booktoki implements Plugin.PluginBase {
         );
       }
       throw new Error(
-        `소설을 찾을 수 없습니다: ${title} | UA: ${this.getUserAgent()}`,
+        `목록을 불러올 수 없습니다. (웹뷰 확인 필요) | Title: ${title}`,
       );
     }
-
     return novels;
   }
 
@@ -128,9 +134,15 @@ class Booktoki implements Plugin.PluginBase {
     const res = await fetchApi(url, {
       headers: this.getHeaders(),
     });
+
+    if (res.status === 403 || res.status === 503) {
+      throw new Error(
+        `접근 거부됨 (${res.status}): 웹뷰(WebView)에서 사이트를 열어 Cloudflare 확인을 완료해 주세요.`,
+      );
+    }
+
     const body = await res.text();
     const loadedCheerio = parseHTML(body);
-
     const novels: Plugin.NovelItem[] = [];
 
     loadedCheerio('#webtoon-list li').each((i, el) => {
@@ -155,10 +167,9 @@ class Booktoki implements Plugin.PluginBase {
         );
       }
       throw new Error(
-        `검색 결과를 찾을 수 없습니다: ${title} | UA: ${this.getUserAgent()}`,
+        `검색 결과를 불러올 수 없습니다. (웹뷰 확인 필요) | Title: ${title}`,
       );
     }
-
     return novels;
   }
 
@@ -167,6 +178,13 @@ class Booktoki implements Plugin.PluginBase {
     const res = await fetchApi(`${Booktoki.url}/${novelPath}`, {
       headers: this.getHeaders(),
     });
+
+    if (res.status === 403 || res.status === 503) {
+      throw new Error(
+        `접근 거부됨 (${res.status}): 웹뷰에서 Cloudflare를 확인해 주세요.`,
+      );
+    }
+
     const body = await res.text();
     const loadedCheerio = parseHTML(body);
 
@@ -217,10 +235,16 @@ class Booktoki implements Plugin.PluginBase {
     const res = await fetchApi(`${Booktoki.url}/${chapterPath}`, {
       headers: this.getHeaders(),
     });
+
+    if (res.status === 403 || res.status === 503) {
+      throw new Error(
+        `접근 거부됨 (${res.status}): 웹뷰에서 Cloudflare를 확인해 주세요.`,
+      );
+    }
+
     const body = await res.text();
     const loadedCheerio = parseHTML(body);
 
-    // Check for html_data encoded content (ManaTokiTrap logic)
     const scripts = loadedCheerio('script').toArray();
     let decodedContent = '';
     for (const script of scripts) {
@@ -241,7 +265,6 @@ class Booktoki implements Plugin.PluginBase {
 
     let content = decodedContent;
     if (!content) {
-      // Extracting novel content (fallback)
       content = loadedCheerio('#novel_content').html() || '';
       if (!content) {
         content = loadedCheerio('.view-content').html() || '';
@@ -249,7 +272,6 @@ class Booktoki implements Plugin.PluginBase {
     }
 
     if (content) {
-      // Remove scripts and noise (Trap)
       const $ = parseHTML(content);
       $('script, style, iframe, ins').remove();
       $('[style*="display:none"], [style*="display: none"]').remove();
@@ -260,7 +282,6 @@ class Booktoki implements Plugin.PluginBase {
       $('[style*="width:0"], [style*="width:0px"]').remove();
       $('[style*="overflow:hidden"]').remove();
 
-      // Common noise selectors
       $('div, span').each((i, el) => {
         const style = $(el).attr('style');
         if (
@@ -270,10 +291,8 @@ class Booktoki implements Plugin.PluginBase {
           $(el).remove();
         }
       });
-
       content = $.html() || '';
     }
-
     return content || '본문을 불러올 수 없습니다. (웹뷰에서 확인해 주세요)';
   }
 
