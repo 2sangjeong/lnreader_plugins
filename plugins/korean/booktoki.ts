@@ -7,7 +7,7 @@ class Booktoki implements Plugin.PluginBase {
   name = '북토끼 (Booktoki)';
   icon = 'src/kr/booktoki/icon.png';
   site = 'https://booktoki469.com';
-  version = '1.0.9';
+  version = '1.1.0';
   static url: string | undefined;
 
   async checkUrl() {
@@ -29,11 +29,27 @@ class Booktoki implements Plugin.PluginBase {
   }
 
   private getUserAgent(): string {
+    let ua: string | undefined;
     try {
-      return navigator.userAgent;
+      ua = (navigator as any)?.userAgent;
     } catch (e) {
-      return 'Mozilla/5.0 (Linux; Android 10; K) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0.0.0 Mobile Safari/537.36';
+      // ignore
     }
+    if (!ua || ua === 'undefined' || ua.includes('undefined')) {
+      ua =
+        'Mozilla/5.0 (Linux; Android 10; K) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0.0.0 Mobile Safari/537.36';
+    }
+    return ua;
+  }
+
+  private getHeaders() {
+    return {
+      'User-Agent': this.getUserAgent(),
+      'Referer': `${Booktoki.url}/`,
+      'Accept':
+        'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8,application/signed-exchange;v=b3;q=0.7',
+      'Accept-Language': 'ko-KR,ko;q=0.9,en-US;q=0.8,en;q=0.7',
+    };
   }
 
   async popularNovels(
@@ -46,10 +62,7 @@ class Booktoki implements Plugin.PluginBase {
       : `${Booktoki.url}/novel?sst=wr_hit&sod=desc&page=${pageNo}`;
 
     const res = await fetchApi(url, {
-      headers: {
-        'User-Agent': this.getUserAgent(),
-        Referer: `${Booktoki.url}/`,
-      },
+      headers: this.getHeaders(),
     });
     const body = await res.text();
     const loadedCheerio = parseHTML(body);
@@ -89,10 +102,7 @@ class Booktoki implements Plugin.PluginBase {
     const url = `${Booktoki.url}/novel/p${pageNo}?stx=${encodeURIComponent(searchTerm)}`;
 
     const res = await fetchApi(url, {
-      headers: {
-        'User-Agent': this.getUserAgent(),
-        Referer: `${Booktoki.url}/`,
-      },
+      headers: this.getHeaders(),
     });
     const body = await res.text();
     const loadedCheerio = parseHTML(body);
@@ -127,10 +137,7 @@ class Booktoki implements Plugin.PluginBase {
   async parseNovel(novelPath: string): Promise<Plugin.SourceNovel> {
     await this.checkUrl();
     const res = await fetchApi(`${Booktoki.url}/${novelPath}`, {
-      headers: {
-        'User-Agent': this.getUserAgent(),
-        Referer: `${Booktoki.url}/`,
-      },
+      headers: this.getHeaders(),
     });
     const body = await res.text();
     const loadedCheerio = parseHTML(body);
@@ -180,10 +187,7 @@ class Booktoki implements Plugin.PluginBase {
   async parseChapter(chapterPath: string): Promise<string> {
     await this.checkUrl();
     const res = await fetchApi(`${Booktoki.url}/${chapterPath}`, {
-      headers: {
-        'User-Agent': this.getUserAgent(),
-        Referer: `${Booktoki.url}/`,
-      },
+      headers: this.getHeaders(),
     });
     const body = await res.text();
     const loadedCheerio = parseHTML(body);
