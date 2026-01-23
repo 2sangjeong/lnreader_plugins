@@ -7,7 +7,7 @@ class Booktoki implements Plugin.PluginBase {
   name = '북토끼 (Booktoki)';
   icon = 'src/kr/booktoki/icon.png';
   site = 'https://booktoki469.com';
-  version = '1.0.6';
+  version = '1.0.9';
   static url: string | undefined;
 
   async checkUrl() {
@@ -28,6 +28,14 @@ class Booktoki implements Plugin.PluginBase {
     }
   }
 
+  private getUserAgent(): string {
+    try {
+      return navigator.userAgent;
+    } catch (e) {
+      return 'Mozilla/5.0 (Linux; Android 10; K) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0.0.0 Mobile Safari/537.36';
+    }
+  }
+
   async popularNovels(
     pageNo: number,
     { showLatestNovels }: Plugin.PopularNovelsOptions,
@@ -39,6 +47,7 @@ class Booktoki implements Plugin.PluginBase {
 
     const res = await fetchApi(url, {
       headers: {
+        'User-Agent': this.getUserAgent(),
         Referer: `${Booktoki.url}/`,
       },
     });
@@ -63,12 +72,7 @@ class Booktoki implements Plugin.PluginBase {
 
     if (novels.length === 0) {
       const title = loadedCheerio('title').text().trim();
-      let ua = 'Unknown';
-      try {
-        ua = navigator.userAgent;
-      } catch (e) {
-        ua = 'navigator undefined';
-      }
+      const ua = this.getUserAgent();
       throw new Error(
         `NoNovelsFound: ${title} | ${url} | UA: ${ua} | ${body.trim().substring(0, 100)}`,
       );
@@ -86,6 +90,7 @@ class Booktoki implements Plugin.PluginBase {
 
     const res = await fetchApi(url, {
       headers: {
+        'User-Agent': this.getUserAgent(),
         Referer: `${Booktoki.url}/`,
       },
     });
@@ -110,12 +115,7 @@ class Booktoki implements Plugin.PluginBase {
 
     if (novels.length === 0) {
       const title = loadedCheerio('title').text().trim();
-      let ua = 'Unknown';
-      try {
-        ua = navigator.userAgent;
-      } catch (e) {
-        ua = 'navigator undefined';
-      }
+      const ua = this.getUserAgent();
       throw new Error(
         `NoNovelsFound: ${title} | ${url} | UA: ${ua} | ${body.trim().substring(0, 100)}`,
       );
@@ -128,6 +128,7 @@ class Booktoki implements Plugin.PluginBase {
     await this.checkUrl();
     const res = await fetchApi(`${Booktoki.url}/${novelPath}`, {
       headers: {
+        'User-Agent': this.getUserAgent(),
         Referer: `${Booktoki.url}/`,
       },
     });
@@ -180,6 +181,7 @@ class Booktoki implements Plugin.PluginBase {
     await this.checkUrl();
     const res = await fetchApi(`${Booktoki.url}/${chapterPath}`, {
       headers: {
+        'User-Agent': this.getUserAgent(),
         Referer: `${Booktoki.url}/`,
       },
     });
