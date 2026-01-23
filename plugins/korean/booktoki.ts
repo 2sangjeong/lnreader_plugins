@@ -5,7 +5,7 @@ import { load as parseHTML } from 'cheerio';
 class Booktoki implements Plugin.PluginBase {
   id = 'booktoki';
   name = '북토끼 (Booktoki)';
-  icon = 'src/ko/booktoki/icon.png';
+  icon = 'src/kr/booktoki/icon.png';
   site = 'https://booktoki469.com';
   version = '1.0.0';
   static url: string | undefined;
