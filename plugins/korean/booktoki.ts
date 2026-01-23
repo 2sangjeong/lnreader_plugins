@@ -7,7 +7,7 @@ class Booktoki implements Plugin.PluginBase {
   name = '북토끼 (Booktoki)';
   icon = 'src/kr/booktoki/icon.png';
   site = 'https://booktoki469.com';
-  version = '1.1.1';
+  version = '1.1.2';
   static url: string | undefined;
 
   async checkUrl() {
@@ -30,8 +30,9 @@ class Booktoki implements Plugin.PluginBase {
 
   private getUserAgent(): string | undefined {
     try {
-      const ua = navigator.userAgent;
-      if (ua && ua !== 'undefined' && !ua.includes('undefined')) {
+      // @ts-ignore
+      const ua = navigator?.userAgent || global?.userAgent;
+      if (ua && ua !== 'undefined' && ua !== 'null') {
         return ua;
       }
     } catch (e) {
@@ -46,6 +47,11 @@ class Booktoki implements Plugin.PluginBase {
       'Accept':
         'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8,application/signed-exchange;v=b3;q=0.7',
       'Accept-Language': 'ko-KR,ko;q=0.9,en-US;q=0.8,en;q=0.7',
+      'Sec-Fetch-Dest': 'document',
+      'Sec-Fetch-Mode': 'navigate',
+      'Sec-Fetch-Site': 'same-origin',
+      'Sec-Fetch-User': '?1',
+      'Upgrade-Insecure-Requests': '1',
     };
     const ua = this.getUserAgent();
     if (ua) {
@@ -87,7 +93,7 @@ class Booktoki implements Plugin.PluginBase {
 
     if (novels.length === 0) {
       const title = loadedCheerio('title').text().trim();
-      const ua = this.getUserAgent() || 'System Default';
+      const ua = this.getUserAgent() || 'App Default';
       throw new Error(
         `NoNovelsFound: ${title} | ${url} | UA: ${ua} | ${body.trim().substring(0, 100)}`,
       );
@@ -127,7 +133,7 @@ class Booktoki implements Plugin.PluginBase {
 
     if (novels.length === 0) {
       const title = loadedCheerio('title').text().trim();
-      const ua = this.getUserAgent() || 'System Default';
+      const ua = this.getUserAgent() || 'App Default';
       throw new Error(
         `NoNovelsFound: ${title} | ${url} | UA: ${ua} | ${body.trim().substring(0, 100)}`,
       );
