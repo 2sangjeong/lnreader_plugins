@@ -50,18 +50,36 @@ class Booktoki implements Plugin.PluginBase {
     } catch (e) {
       // ignore
     }
+
+    // fallback for LNReader v2/v3
+    try {
+      // @ts-ignore
+      if (typeof window !== 'undefined' && window.lnreader?.userAgent) {
+        // @ts-ignore
+        return window.lnreader.userAgent;
+      }
+    } catch (e) {
+      // ignore
+    }
+
     // Latest Chrome 131 for Windows - Highest reliability for Desktops
     return 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36';
   }
 
   private getHeaders() {
+    const ua = this.getUserAgent();
     const headers: Record<string, string> = {
       'Referer': `${Booktoki.url}/`,
       'Accept':
         'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8',
       'Accept-Language': 'ko-KR,ko;q=0.9,en-US;q=0.8,en;q=0.7',
+      'User-Agent': ua,
+      'Cache-Control': 'max-age=0',
+      'Sec-Ch-Ua':
+        '"Google Chrome";v="131", "Chromium";v="131", "Not_A Brand";v="24"',
+      'Sec-Ch-Ua-Mobile': '?0',
+      'Sec-Ch-Ua-Platform': '"Windows"',
     };
-    headers['User-Agent'] = this.getUserAgent();
     return headers;
   }
 
@@ -76,9 +94,13 @@ class Booktoki implements Plugin.PluginBase {
       body.includes('Cloudflare') ||
       body.includes('Just a moment...')
     ) {
-      const ua = this.getUserAgent();
+      const ua = this.getHeaders()['User-Agent'];
       throw new Error(
-        `차단됨 (${res.status}): 웹뷰(WebView)에서 북토끼 접속 후 '사람임을 확인' 하시면 정상 작동합니다.\n\n[중요] 세션 동기화를 위해 아래 값을 '앱 설정 -> 브라우저 -> User-Agent'에 똑같이 입력해 주세요:\n${ua}`,
+        `Cloudflare 차단됨 (${res.status}):\n\n` +
+          `1. 'WebView' 버튼을 눌러 북토끼에 접속하세요.\n` +
+          `2. '사람임을 확인' 혹은 챌린지를 완료하세요.\n` +
+          `3. 만약 계속 막힌다면, [앱 설정 -> 브라우저 -> User-Agent]를 아래와 똑같이 입력했는지 확인하세요:\n\n` +
+          `${ua}`,
       );
     }
     return { res, body };
