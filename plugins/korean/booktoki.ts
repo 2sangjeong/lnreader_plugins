@@ -7,7 +7,7 @@ class Booktoki implements Plugin.PluginBase {
   name = '북토끼 (Booktoki)';
   icon = 'src/kr/booktoki/icon.png';
   site = 'https://booktoki469.com';
-  version = '1.2.4';
+  version = '1.2.5';
   static url: string | undefined;
 
   async checkUrl() {
