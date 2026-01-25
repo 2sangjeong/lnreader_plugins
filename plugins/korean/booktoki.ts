@@ -7,7 +7,7 @@ class Booktoki implements Plugin.PluginBase {
   name = '북토끼 (Booktoki)';
   icon = 'src/kr/booktoki/icon.png';
   site = 'https://booktoki469.com';
-  version = '1.2.5';
+  version = '1.2.6';
   static url: string | undefined;
 
   async checkUrl() {
@@ -36,14 +36,21 @@ class Booktoki implements Plugin.PluginBase {
   }
 
   private getUserAgent(): string {
+    const defaultUA =
+      'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36';
+
     try {
       // @ts-ignore
-      const ua = navigator?.userAgent || global?.userAgent;
+      const ua =
+        navigator?.userAgent ||
+        global?.userAgent ||
+        window?.navigator?.userAgent;
       if (
         ua &&
         ua !== 'undefined' &&
         ua !== 'null' &&
-        !ua.includes('undefined')
+        !ua.includes('undefined') &&
+        !ua.includes('node-fetch')
       ) {
         return ua;
       }
@@ -51,7 +58,7 @@ class Booktoki implements Plugin.PluginBase {
       // ignore
     }
 
-    // fallback for LNReader v2/v3
+    // fallback for LNReader specific global
     try {
       // @ts-ignore
       if (typeof window !== 'undefined' && window.lnreader?.userAgent) {
@@ -62,8 +69,7 @@ class Booktoki implements Plugin.PluginBase {
       // ignore
     }
 
-    // Latest Chrome 131 for Windows - Highest reliability for Desktops
-    return 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36';
+    return defaultUA;
   }
 
   private getHeaders() {
@@ -74,11 +80,11 @@ class Booktoki implements Plugin.PluginBase {
         'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8',
       'Accept-Language': 'ko-KR,ko;q=0.9,en-US;q=0.8,en;q=0.7',
       'User-Agent': ua,
-      'Cache-Control': 'max-age=0',
-      'Sec-Ch-Ua':
-        '"Google Chrome";v="131", "Chromium";v="131", "Not_A Brand";v="24"',
-      'Sec-Ch-Ua-Mobile': '?0',
-      'Sec-Ch-Ua-Platform': '"Windows"',
+      'Sec-Fetch-Dest': 'document',
+      'Sec-Fetch-Mode': 'navigate',
+      'Sec-Fetch-Site': 'same-origin',
+      'Sec-Fetch-User': '?1',
+      'Upgrade-Insecure-Requests': '1',
     };
     return headers;
   }
