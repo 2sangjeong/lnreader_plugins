@@ -83,7 +83,7 @@ class Booktoki implements Plugin.PluginBase {
       };
       if (key) headers['X-API-Key'] = key;
 
-      const res = await fetch(fsUrl, {
+      const res = await fetchApi(fsUrl, {
         method: 'POST',
         headers,
         body: JSON.stringify({
@@ -93,7 +93,16 @@ class Booktoki implements Plugin.PluginBase {
           userAgent: ua,
         }),
       });
-      const json = (await res.json()) as any;
+      const body = await res.text();
+      let json;
+      try {
+        json = JSON.parse(body);
+      } catch (e) {
+        throw new Error(
+          ` FlareSolverr 응답 파싱 실패 (JSON 아님): ${body.substring(0, 100)}`,
+        );
+      }
+
       if (json.status === 'ok') {
         return json.solution.response;
       }
