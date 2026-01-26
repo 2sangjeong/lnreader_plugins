@@ -9,7 +9,7 @@ class Booktoki implements Plugin.PluginBase {
   name = '북토끼 (Booktoki)';
   icon = 'src/kr/booktoki/icon.png';
   site = 'https://booktoki469.com';
-  version = '1.5.2';
+  version = '1.5.3';
   static url: string | undefined;
 
   filters = {
@@ -110,13 +110,15 @@ class Booktoki implements Plugin.PluginBase {
 
       if (json.status === 'ok') {
         const solutionBody = json.solution?.response || '';
+        // 'Just a moment...'는 확실한 차단 지표이지만, 실제 데이터가 있다면 오탐일 수 있음
         if (
-          solutionBody.includes('challenge-platform') ||
-          solutionBody.includes('Cloudflare') ||
-          solutionBody.includes('Just a moment...')
+          solutionBody.includes('Just a moment...') &&
+          !solutionBody.includes('webtoon-list') &&
+          !solutionBody.includes('post-row') &&
+          !solutionBody.includes('view-title')
         ) {
           throw new Error(
-            'FlareSolverr가 챌린지를 해결했다고 보고했으나, 응답 본문에 여전히 차단 메시지가 포함되어 있습니다.',
+            'FlareSolverr가 성공을 보고했으나, 응답 본문에 여전히 챌린지 페이지가 포함되어 있습니다.',
           );
         }
         return solutionBody;
