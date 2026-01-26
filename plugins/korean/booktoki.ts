@@ -9,13 +9,13 @@ class Booktoki implements Plugin.PluginBase {
   name = '북토끼 (Booktoki)';
   icon = 'src/kr/booktoki/icon.png';
   site = 'https://booktoki469.com';
-  version = '1.5.5';
+  version = '1.5.6';
   static url: string | undefined;
 
   filters = {
     flareSolverrUrl: {
       label: 'FlareSolverr URL (끝에 /v1 포함 필수)',
-      value: 'http://localhost:8191/v1',
+      value: '', // 하드코딩 제거
       type: FilterTypes.TextInput,
     },
     flareSolverrKey: {
@@ -26,23 +26,30 @@ class Booktoki implements Plugin.PluginBase {
   } satisfies Filters;
 
   private getFlareSolverrSettings(filters?: any) {
-    let url =
-      filters?.flareSolverrUrl?.value ||
-      storage.get('booktoki_fs_url') ||
-      'http://localhost:8191/v1';
+    // 1. 전달받은 필터 값이 있으면 최우선 (공백이 아닐 때)
+    // 2. 필터가 없거나 공백이면 storage에서 조회
+    // 3. 둘 다 없으면 localhost(전통적 기본값)
 
-    // 자동 보정: 끝에 /v1이 없으면 추가
+    let url = filters?.flareSolverrUrl?.value || '';
+    let key = filters?.flareSolverrKey?.value || '';
+
+    if (!url) {
+      url = storage.get('booktoki_fs_url') || 'http://localhost:8191/v1';
+    } else {
+      // 필터에서 새로운 값이 들어왔으므로 storage 업데이트
+      storage.set('booktoki_fs_url', url);
+    }
+
+    if (!key) {
+      key = storage.get('booktoki_fs_key') || '';
+    } else {
+      storage.set('booktoki_fs_key', key);
+    }
+
+    // 전처리: 주소 맨 뒤 /v1 보정
     if (url && !url.endsWith('/v1') && !url.endsWith('/v1/')) {
       url = url.replace(/\/$/, '') + '/v1';
     }
-
-    const key =
-      filters?.flareSolverrKey?.value || storage.get('booktoki_fs_key') || '';
-
-    if (filters?.flareSolverrUrl?.value)
-      storage.set('booktoki_fs_url', filters.flareSolverrUrl.value);
-    if (filters?.flareSolverrKey?.value)
-      storage.set('booktoki_fs_key', filters.flareSolverrKey.value);
 
     return { url, key };
   }
