@@ -9,7 +9,7 @@ class Booktoki implements Plugin.PluginBase {
   name = '북토끼 (Booktoki)';
   icon = 'src/kr/booktoki/icon.png';
   site = 'https://booktoki469.com';
-  version = '1.5.3';
+  version = '1.5.4';
   static url: string | undefined;
 
   filters = {
@@ -89,7 +89,7 @@ class Booktoki implements Plugin.PluginBase {
       };
       if (key) headers['X-API-Key'] = key;
 
-      const res = await fetchApi(fsUrl, {
+      const res = await fetch(fsUrl, {
         method: 'POST',
         headers,
         body: JSON.stringify({
