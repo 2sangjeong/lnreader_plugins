@@ -9,13 +9,13 @@ class Booktoki implements Plugin.PluginBase {
   name = '북토끼 (Booktoki)';
   icon = 'src/kr/booktoki/icon.png';
   site = 'https://booktoki469.com';
-  version = '1.8.1';
+  version = '1.9.0';
   static url: string | undefined;
 
   filters = {
     flareSolverrUrl: {
       label: 'FlareSolverr URL (끝에 /v1 포함 필수)',
-      value: '', // 하드코딩 제거
+      value: '',
       type: FilterTypes.TextInput,
     },
     flareSolverrKey: {
@@ -26,17 +26,12 @@ class Booktoki implements Plugin.PluginBase {
   } satisfies Filters;
 
   private getFlareSolverrSettings(filters?: any) {
-    // 1. 전달받은 필터 값이 있으면 최우선 (공백이 아닐 때)
-    // 2. 필터가 없거나 공백이면 storage에서 조회
-    // 3. 둘 다 없으면 localhost(전통적 기본값)
-
     let url = filters?.flareSolverrUrl?.value || '';
     let key = filters?.flareSolverrKey?.value || '';
 
     if (!url) {
       url = storage.get('booktoki_fs_url') || 'http://localhost:8191/v1';
     } else {
-      // 필터에서 새로운 값이 들어왔으므로 storage 업데이트
       storage.set('booktoki_fs_url', url);
     }
 
@@ -46,11 +41,9 @@ class Booktoki implements Plugin.PluginBase {
       storage.set('booktoki_fs_key', key);
     }
 
-    // 전처리: 주소 맨 뒤 /v1 보정
     if (url && !url.endsWith('/v1') && !url.endsWith('/v1/')) {
       url = url.replace(/\/$/, '') + '/v1';
     }
-
     return { url, key };
   }
 
@@ -99,34 +92,29 @@ class Booktoki implements Plugin.PluginBase {
       url,
       maxTimeout: 60000,
     });
-
     let lastError: any;
 
-    // 시도 1: fetchApi (네이티브 네트워크, CORS 우회 가능)
     try {
       const res = await fetchApi(fsUrl, {
         method: 'POST',
         headers,
         body: payload,
       });
-      const body = await res.text();
-      return this.parseFlareSolverrResponse(body);
+      return this.parseFlareSolverrResponse(await res.text());
     } catch (e: any) {
       lastError = e;
     }
 
-    // 시도 2: 전역 fetch (웹뷰 네트워크, 인증서 처리에 차이가 있을 수 있음)
     try {
       const res = await fetch(fsUrl, {
         method: 'POST',
         headers,
         body: payload,
       });
-      const body = await res.text();
-      return this.parseFlareSolverrResponse(body);
+      return this.parseFlareSolverrResponse(await res.text());
     } catch (e: any) {
       throw new Error(
-        `FlareSolverr 연결 실패:\n1. fetchApi: ${lastError?.message || lastError}\n2. fetch: ${e?.message || e}\n주소: ${fsUrl}\n(https 인증서 또는 CORS 설정을 확인해주세요)`,
+        `FlareSolverr 연결 실패:\n1. fetchApi: ${lastError?.message || lastError}\n2. fetch: ${e?.message || e}\n주소: ${fsUrl}`,
       );
     }
   }
@@ -136,67 +124,51 @@ class Booktoki implements Plugin.PluginBase {
     try {
       json = JSON.parse(body);
     } catch (e) {
-      throw new Error(
-        `FlareSolverr 응답이 JSON 형식이 아님: ${body.substring(0, 100)}`,
-      );
+      throw new Error(`FlareSolverr 응답 비정상: ${body.substring(0, 100)}`);
     }
 
     if (json.status === 'ok') {
-      const solutionBody = json.solution?.response || '';
-      if (
-        solutionBody.includes('Just a moment...') &&
-        !solutionBody.includes('webtoon-list') &&
-        !solutionBody.includes('post-row') &&
-        !solutionBody.includes('view-title')
-      ) {
-        throw new Error(
-          'FlareSolverr가 성공을 보고했으나, 응답 본문에 여전히 챌린지 페이지가 포함되어 있습니다.',
-        );
-      }
-      return solutionBody;
+      const cookies = json.solution?.cookies || [];
+      const cfClearance = cookies.find(
+        (c: any) => c.name === 'cf_clearance',
+      )?.value;
+      if (cfClearance) storage.set('booktoki_cf_clearance', cfClearance);
+      if (json.solution?.userAgent)
+        storage.set('booktoki_cached_ua', json.solution.userAgent);
+
+      return json.solution?.response || '';
     }
-    throw new Error(json.message || `FlareSolverr 오류 (상태: ${json.status})`);
+    throw new Error(json.message || `FlareSolverr 오류 (${json.status})`);
   }
 
-  private getHeaders() {
-    return {
+  private getCachedHeaders() {
+    const cfClearance = storage.get('booktoki_cf_clearance');
+    const ua = storage.get('booktoki_cached_ua') || this.getUserAgent();
+    const headers: Record<string, string> = {
       'Referer': `${Booktoki.url}/`,
-      // User-Agent를 삭제하여 App 설정을 따르게 함
+      'User-Agent': ua,
       'Accept':
         'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8',
       'Accept-Language': 'ko-KR,ko;q=0.9,en-US;q=0.8,en;q=0.7',
     };
+    if (cfClearance) headers['Cookie'] = `cf_clearance=${cfClearance}`;
+    return headers;
   }
 
   private async fetchPage(url: string, filters?: any) {
-    let res, body;
     try {
-      res = await fetchApi(url, { headers: this.getHeaders() });
-      body = await res.text();
-    } catch (e) {
-      // Fallback to FlareSolverr on network error
-      return { body: await this.fetchViaFlareSolverr(url, filters) };
-    }
-
-    if (
-      res.status === 403 ||
-      res.status === 503 ||
-      body.includes('challenge-platform') ||
-      body.includes('Cloudflare') ||
-      body.includes('Just a moment...')
-    ) {
-      try {
-        const flaresolverrBody = await this.fetchViaFlareSolverr(url, filters);
-        return { body: flaresolverrBody };
-      } catch (e: any) {
-        throw new Error(
-          `Cloudflare 차단됨 (${res.status}):\n` +
-            `재시도 실패: ${e.message}\n` +
-            `웹뷰로 접속하여 '사람 확인'을 완료하거나 FlareSolverr 설정을 확인해주세요.`,
-        );
+      const res = await fetchApi(url, { headers: this.getCachedHeaders() });
+      const body = await res.text();
+      if (
+        res.ok &&
+        !body.includes('challenge-platform') &&
+        !body.includes('Just a moment...')
+      ) {
+        return { body };
       }
-    }
-    return { res, body };
+    } catch (e) {}
+
+    return { body: await this.fetchViaFlareSolverr(url, filters) };
   }
 
   private decodeHtmlData(encoded: string): string {
@@ -212,30 +184,16 @@ class Booktoki implements Plugin.PluginBase {
     { showLatestNovels, filters }: Plugin.PopularNovelsOptions,
   ): Promise<Plugin.NovelItem[]> {
     await this.checkUrl();
-
     const url = showLatestNovels
       ? `${Booktoki.url}/novel/p${pageNo}`
       : `${Booktoki.url}/novel?sst=wr_hit&sod=desc&page=${pageNo}`;
-
-    let data;
-    try {
-      data = await this.fetchPage(url, filters);
-    } catch (e) {
-      if (pageNo === 1) {
-        data = await this.fetchPage(`${Booktoki.url}`, filters);
-      } else {
-        throw e;
-      }
-    }
-
-    const loadedCheerio = parseHTML(data.body);
+    const { body } = await this.fetchPage(url, filters);
+    const loadedCheerio = parseHTML(body);
     const novels: Plugin.NovelItem[] = [];
-
     loadedCheerio('#webtoon-list li').each((i, el) => {
       const name = loadedCheerio(el).find('.title').text().trim();
       const cover = loadedCheerio(el).find('img').attr('src');
       const novelUrl = loadedCheerio(el).find('a').attr('href');
-
       if (name && novelUrl) {
         novels.push({
           name,
@@ -244,7 +202,6 @@ class Booktoki implements Plugin.PluginBase {
         });
       }
     });
-
     return novels;
   }
 
@@ -254,16 +211,13 @@ class Booktoki implements Plugin.PluginBase {
   ): Promise<Plugin.NovelItem[]> {
     await this.checkUrl();
     const url = `${Booktoki.url}/novel/p${pageNo}?stx=${encodeURIComponent(searchTerm)}`;
-
     const { body } = await this.fetchPage(url);
     const loadedCheerio = parseHTML(body);
     const novels: Plugin.NovelItem[] = [];
-
     loadedCheerio('#webtoon-list li').each((i, el) => {
       const name = loadedCheerio(el).find('.title').text().trim();
       const cover = loadedCheerio(el).find('img').attr('src');
       const novelUrl = loadedCheerio(el).find('a').attr('href');
-
       if (name && novelUrl) {
         novels.push({
           name,
@@ -272,20 +226,15 @@ class Booktoki implements Plugin.PluginBase {
         });
       }
     });
-
     return novels;
   }
 
   async parseNovel(novelPath: string): Promise<Plugin.SourceNovel> {
     await this.checkUrl();
     const cleanPath = novelPath.split('?')[0];
-
-    // sst=wr_num&sod=asc: 회차 번호 기준 오름차순 정렬
-    // 북토끼 상세 페이지는 보통 한 페이지에 모든 회차를 보여줌
     const url = `${Booktoki.url}/${cleanPath}?sst=wr_num&sod=asc`;
     const body = await this.fetchViaFlareSolverr(url);
     const loadedCheerio = parseHTML(body);
-
     const novelName = loadedCheerio('.view-title > span > b').text().trim();
     const novel: Plugin.SourceNovel = {
       path: novelPath,
@@ -297,60 +246,49 @@ class Booktoki implements Plugin.PluginBase {
     };
 
     const seenPaths = new Set<string>();
-    const items = loadedCheerio('ul.list-body > li.list-item');
-
-    items.each((i, el) => {
+    loadedCheerio('ul.list-body > li.list-item').each((i, el) => {
       const nameEl = loadedCheerio(el).find('.wr-subject > a');
       const chapterUrl = nameEl.attr('href');
-      const releaseTimeStr = loadedCheerio(el).find('.wr-date').text().trim();
-      const wrNumText = loadedCheerio(el).find('.wr-num').text().trim();
-
       if (chapterUrl && !seenPaths.has(chapterUrl)) {
         seenPaths.add(chapterUrl);
-
         let fullTitle = nameEl.text().trim();
         nameEl.find('span, img, i').remove();
-        let rawChapterName = nameEl.text().trim();
-
-        // 번호 추출 (제목 우선 -> wr-num 보조)
-        let chapterNum = 0;
-        const titleNumMatch = rawChapterName.match(/(\d+)/);
-        if (titleNumMatch) {
-          chapterNum = parseInt(titleNumMatch[1]);
-        } else {
-          chapterNum = parseInt(wrNumText.replace(/[^0-9]/g, '')) || 0;
-        }
-
-        // 공지사항 필터링
+        let rawName = nameEl.text().trim();
+        let chapterNum =
+          parseInt(rawName.match(/(\d+)/)?.[1] || '0') ||
+          parseInt(
+            loadedCheerio(el)
+              .find('.wr-num')
+              .text()
+              .replace(/[^0-9]/g, ''),
+          ) ||
+          0;
         if (
           chapterNum === 0 &&
-          (fullTitle.includes('공지') || wrNumText.includes('공지'))
-        ) {
+          (fullTitle.includes('공지') ||
+            loadedCheerio(el).find('.wr-num').text().includes('공지'))
+        )
           return;
-        }
-
-        // 이름 정제
-        let chapterName = rawChapterName;
-        if (novelName && rawChapterName.includes(novelName)) {
-          chapterName = rawChapterName.replace(novelName, '').trim();
-        }
-        chapterName = chapterName.replace(/^[-_.\s]+/, '').trim();
-        if (!chapterName) chapterName = fullTitle;
-
+        let chapterName =
+          novelName && rawName.includes(novelName)
+            ? rawName.replace(novelName, '').trim()
+            : rawName;
+        chapterName = chapterName.replace(/^[-_.\s]+/, '').trim() || fullTitle;
         novel.chapters?.push({
           name: chapterName,
           path: chapterUrl.replace(`${Booktoki.url}/`, ''),
-          releaseTime: releaseTimeStr.replace(/\./g, '-'),
+          releaseTime: loadedCheerio(el)
+            .find('.wr-date')
+            .text()
+            .trim()
+            .replace(/\./g, '-'),
           chapterNumber: chapterNum,
         });
       }
     });
-
-    // 최종 숫자 정렬
     novel.chapters?.sort(
       (a, b) => (a.chapterNumber || 0) - (b.chapterNumber || 0),
     );
-
     return novel;
   }
 
@@ -358,58 +296,35 @@ class Booktoki implements Plugin.PluginBase {
     await this.checkUrl();
     const { body } = await this.fetchPage(`${Booktoki.url}/${chapterPath}`);
     const loadedCheerio = parseHTML(body);
-
-    const scripts = loadedCheerio('script').toArray();
-    let decodedContent = '';
-    for (const script of scripts) {
-      const scriptContent = loadedCheerio(script).html() || '';
-      if (scriptContent.includes('var html_data')) {
+    let decoded = '';
+    loadedCheerio('script').each((i, s) => {
+      const sc = loadedCheerio(s).html() || '';
+      if (sc.includes('var html_data')) {
+        let combined = '';
         const regex = /html_data\+='(.*?)';/g;
         let match;
-        let combined = '';
-        while ((match = regex.exec(scriptContent)) !== null) {
-          combined += match[1];
-        }
-        if (combined) {
-          decodedContent = this.decodeHtmlData(combined);
-          break;
-        }
+        while ((match = regex.exec(sc)) !== null) combined += match[1];
+        if (combined) decoded = this.decodeHtmlData(combined);
       }
-    }
+    });
 
-    let content = decodedContent;
-    if (!content) {
-      content = loadedCheerio('#novel_content').html() || '';
-      if (!content) {
-        content = loadedCheerio('.view-content').html() || '';
-      }
-    }
-
+    let content =
+      decoded ||
+      loadedCheerio('#novel_content').html() ||
+      loadedCheerio('.view-content').html() ||
+      '';
     if (content) {
       const $ = parseHTML(content);
-      $('script, style, iframe, ins').remove();
-      $('[style*="display:none"], [style*="display: none"]').remove();
-      $('[style*="font-size:0"], [style*="font-size: 0"]').remove();
-      $('[style*="visibility:hidden"], [style*="visibility: hidden"]').remove();
-      $('[style*="opacity:0"], [style*="opacity: 0"]').remove();
-      $('[style*="height:0"], [style*="height:0px"]').remove();
-      $('[style*="width:0"], [style*="width:0px"]').remove();
-      $('div, span').each((i, el) => {
-        const style = $(el).attr('style');
-        if (
-          style &&
-          (style.includes('font-size:0') || style.includes('display:none'))
-        ) {
-          $(el).remove();
-        }
-      });
-      content = $.html() || '';
+      $(
+        'script, style, iframe, ins, [style*="display:none"], [style*="font-size:0"]',
+      ).remove();
+      content = $.html();
     }
     return content || '본문을 불러올 수 없습니다.';
   }
 
-  resolveUrl(path: string, isNovel?: boolean) {
-    return (Booktoki.url ? Booktoki.url : this.site) + '/' + path;
+  resolveUrl(path: string) {
+    return (Booktoki.url || this.site) + '/' + path;
   }
 }
 
