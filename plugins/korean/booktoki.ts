@@ -6,22 +6,20 @@ class Booktoki implements Plugin.PluginBase {
   id = 'booktoki';
   name = '북토끼 (Booktoki)';
   icon = 'src/kr/booktoki/icon.png';
-  site = 'https://booktoki469.com'; // 최신 주소로 변경
-  version = '1.3.0'; // 버전 올림
+  site = 'https://booktoki469.com'; // 최신 주소 확인
+  version = '1.3.5'; // 버전 업데이트
   static url: string | undefined;
 
-  // 1. [핵심] 윈도우(PC)가 아닌 '안드로이드 모바일' User-Agent 사용
-  // 이렇게 해야 모바일 앱에서의 접속을 자연스럽게 인식하여 Cloudflare 통과 확률이 높아집니다.
-  // LNReader 설정에서 바꾸지 말고, 이 코드 내의 값을 사용하세요.
+  // 🔴 [중요] 여기에 아까 WebView에서 복사한 "진짜 User-Agent"를 붙여넣으세요.
+  // 아래는 예시입니다. 본인의 폰 정보와 다르면 차단될 수 있습니다.
   userAgent =
-    'Mozilla/5.0 (Linux; Android 10; K) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Mobile Safari/537.36';
+    'Mozilla/5.0 (Linux; Android 10; K) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/144.0.0.0 Mobile Safari/537.36';
 
   async checkUrl() {
-    // URL 체크 로직은 유지하되, 실패 시 사이트 기본값 사용
     if (!Booktoki.url) {
       try {
         const res = await fetchApi(this.site, {
-          headers: { 'User-Agent': this.userAgent }, // 체크할 때도 UA 사용
+          headers: { 'User-Agent': this.userAgent },
         });
         if (res.ok && !res.url.includes('survey-smiles.com')) {
           Booktoki.url = res.url.replace(/\/$/, '');
@@ -34,23 +32,21 @@ class Booktoki implements Plugin.PluginBase {
     }
   }
 
-  // 2. 헤더 생성 함수 단순화
   private getHeaders() {
     return {
       'Referer': `${Booktoki.url}/`,
       'User-Agent': this.userAgent,
-      'Accept':
-        'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8',
-      'Accept-Language': 'ko-KR,ko;q=0.9,en-US;q=0.8,en;q=0.7',
-      // 불필요한 Sec-Ch-Ua 헤더 제거 (오히려 봇 탐지에 걸릴 수 있음)
+      // 🔴 Cloudflare가 싫어하는 'Sec-Ch-Ua' 헤더들은 모두 삭제했습니다.
+      // 단순히 Referer와 User-Agent만 보내는 것이 통과 확률이 훨씬 높습니다.
     };
   }
 
   private async fetchPage(url: string) {
-    // 3. fetchApi 호출 시 헤더 명시적 전달
+    // 헤더 적용
     const res = await fetchApi(url, { headers: this.getHeaders() });
     const body = await res.text();
 
+    // 차단 감지 로직
     if (
       res.status === 403 ||
       res.status === 503 ||
@@ -59,13 +55,15 @@ class Booktoki implements Plugin.PluginBase {
       body.includes('Just a moment...')
     ) {
       throw new Error(
-        `Cloudflare 차단됨 (${res.status}):\n` +
-          `앱 내 웹뷰(지구본 아이콘)를 열어 북토끼에 한 번 접속해주세요.\n` +
-          `접속 후 '사람 확인'을 완료하고 다시 목록을 당겨서 새로고침 하세요.`,
+        `Cloudflare 차단됨 (Status: ${res.status})\n` +
+          `설정된 User-Agent와 실제 기기 정보가 달라서 차단되었습니다.\n` +
+          `WebView에서 'my user agent'를 검색해서 나온 값을 코드에 정확히 넣었는지 확인해주세요.`,
       );
     }
     return { res, body };
   }
+
+  // --- (아래 로직은 기존과 동일합니다) ---
 
   private decodeHtmlData(encoded: string): string {
     let result = '';
@@ -89,7 +87,6 @@ class Booktoki implements Plugin.PluginBase {
     try {
       data = await this.fetchPage(url);
     } catch (e) {
-      // 첫 페이지 로드 실패 시 메인 페이지 시도 (URL 갱신 유도)
       if (pageNo === 1) {
         data = await this.fetchPage(`${Booktoki.url}`);
       } else {
@@ -100,7 +97,6 @@ class Booktoki implements Plugin.PluginBase {
     const loadedCheerio = parseHTML(data.body);
     const novels: Plugin.NovelItem[] = [];
 
-    // 북토끼 리스트 파싱
     loadedCheerio('#webtoon-list li').each((i, el) => {
       const name = loadedCheerio(el).find('.title').text().trim();
       const cover = loadedCheerio(el).find('img').attr('src');
@@ -115,14 +111,6 @@ class Booktoki implements Plugin.PluginBase {
       }
     });
 
-    if (novels.length === 0) {
-      // 파싱 실패는 차단되었거나 구조가 바뀐 것
-      // 하지만 에러를 던지기보단 빈 배열을 주거나 로그를 남기는 게 나을 수 있음
-      // 여기선 사용자 피드백을 위해 에러 유지
-      throw new Error(
-        '목록을 불러왔으나 비어있습니다. Cloudflare 차단 가능성이 높습니다.',
-      );
-    }
     return novels;
   }
 
@@ -234,7 +222,6 @@ class Booktoki implements Plugin.PluginBase {
 
     if (content) {
       const $ = parseHTML(content);
-      // 불필요한 태그 제거 로직 유지
       $('script, style, iframe, ins').remove();
       $('[style*="display:none"], [style*="display: none"]').remove();
       $('[style*="font-size:0"], [style*="font-size: 0"]').remove();
@@ -253,7 +240,7 @@ class Booktoki implements Plugin.PluginBase {
       });
       content = $.html() || '';
     }
-    return content || '본문을 불러올 수 없습니다. (웹뷰 로그인 확인 필요)';
+    return content || '본문을 불러올 수 없습니다.';
   }
 
   resolveUrl(path: string, isNovel?: boolean) {
