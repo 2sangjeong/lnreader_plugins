@@ -1,19 +1,64 @@
 import { fetchApi } from '@libs/fetch';
 import { Plugin } from '@/types/plugin';
 import { load as parseHTML } from 'cheerio';
+import { FilterTypes, Filters } from '@libs/filterInputs';
+import { storage } from '@libs/storage';
 
 class Booktoki implements Plugin.PluginBase {
   id = 'booktoki';
   name = '북토끼 (Booktoki)';
   icon = 'src/kr/booktoki/icon.png';
   site = 'https://booktoki469.com';
-  version = '1.4.0'; // 구조 변경으로 버전 업
+  version = '1.5.0';
   static url: string | undefined;
+
+  filters = {
+    flareSolverrUrl: {
+      label: 'FlareSolverr URL (Nginx/개인 도메인)',
+      value: 'http://localhost:8191/v1',
+      type: FilterTypes.TextInput,
+    },
+    flareSolverrKey: {
+      label: 'FlareSolverr API Key (X-API-Key 헤더)',
+      value: '',
+      type: FilterTypes.TextInput,
+    },
+  } satisfies Filters;
+
+  private getFlareSolverrSettings(filters?: any) {
+    const url =
+      filters?.flareSolverrUrl?.value ||
+      storage.get('booktoki_fs_url') ||
+      'http://localhost:8191/v1';
+    const key =
+      filters?.flareSolverrKey?.value || storage.get('booktoki_fs_key') || '';
+
+    if (filters?.flareSolverrUrl?.value)
+      storage.set('booktoki_fs_url', filters.flareSolverrUrl.value);
+    if (filters?.flareSolverrKey?.value)
+      storage.set('booktoki_fs_key', filters.flareSolverrKey.value);
+
+    return { url, key };
+  }
+
+  private getUserAgent(): string {
+    const defaultUA =
+      'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36';
+    try {
+      // @ts-ignore
+      const ua =
+        navigator?.userAgent ||
+        global?.userAgent ||
+        window?.lnreader?.userAgent;
+      if (ua && !ua.includes('node-fetch') && !ua.includes('undefined'))
+        return ua;
+    } catch (e) {}
+    return defaultUA;
+  }
 
   async checkUrl() {
     if (!Booktoki.url) {
       try {
-        // User-Agent 설정 없이 요청 -> 앱 설정값 자동 사용
         const res = await fetchApi(this.site);
         if (res.ok && !res.url.includes('survey-smiles.com')) {
           Booktoki.url = res.url.replace(/\/$/, '');
@@ -23,6 +68,40 @@ class Booktoki implements Plugin.PluginBase {
       } catch (e) {
         Booktoki.url = this.site;
       }
+    }
+  }
+
+  private async fetchViaFlareSolverr(
+    url: string,
+    filters?: any,
+  ): Promise<string> {
+    const ua = this.getUserAgent();
+    const { url: fsUrl, key } = this.getFlareSolverrSettings(filters);
+    try {
+      const headers: Record<string, string> = {
+        'Content-Type': 'application/json',
+      };
+      if (key) headers['X-API-Key'] = key;
+
+      const res = await fetch(fsUrl, {
+        method: 'POST',
+        headers,
+        body: JSON.stringify({
+          cmd: 'request.get',
+          url,
+          maxTimeout: 60000,
+          userAgent: ua,
+        }),
+      });
+      const json = (await res.json()) as any;
+      if (json.status === 'ok') {
+        return json.solution.response;
+      }
+      throw new Error(json.message || 'FlareSolverr failed');
+    } catch (e: any) {
+      throw new Error(
+        `FlareSolverr 우회 실패: ${e.message}\n설정 확인: ${fsUrl}`,
+      );
     }
   }
 
@@ -36,9 +115,15 @@ class Booktoki implements Plugin.PluginBase {
     };
   }
 
-  private async fetchPage(url: string) {
-    const res = await fetchApi(url, { headers: this.getHeaders() });
-    const body = await res.text();
+  private async fetchPage(url: string, filters?: any) {
+    let res, body;
+    try {
+      res = await fetchApi(url, { headers: this.getHeaders() });
+      body = await res.text();
+    } catch (e) {
+      // Fallback to FlareSolverr on network error
+      return { body: await this.fetchViaFlareSolverr(url, filters) };
+    }
 
     if (
       res.status === 403 ||
@@ -47,11 +132,16 @@ class Booktoki implements Plugin.PluginBase {
       body.includes('Cloudflare') ||
       body.includes('Just a moment...')
     ) {
-      throw new Error(
-        `Cloudflare 차단됨 (${res.status}):\n` +
-          `앱 설정의 User-Agent를 사용 중입니다.\n` +
-          `웹뷰(지구본)로 접속하여 '사람 확인'을 완료해주세요.`,
-      );
+      try {
+        const flaresolverrBody = await this.fetchViaFlareSolverr(url, filters);
+        return { body: flaresolverrBody };
+      } catch (e: any) {
+        throw new Error(
+          `Cloudflare 차단됨 (${res.status}):\n` +
+            `재시도 실패: ${e.message}\n` +
+            `웹뷰로 접속하여 '사람 확인'을 완료하거나 FlareSolverr 설정을 확인해주세요.`,
+        );
+      }
     }
     return { res, body };
   }
@@ -66,7 +156,7 @@ class Booktoki implements Plugin.PluginBase {
 
   async popularNovels(
     pageNo: number,
-    { showLatestNovels }: Plugin.PopularNovelsOptions,
+    { showLatestNovels, filters }: Plugin.PopularNovelsOptions,
   ): Promise<Plugin.NovelItem[]> {
     await this.checkUrl();
 
@@ -76,10 +166,10 @@ class Booktoki implements Plugin.PluginBase {
 
     let data;
     try {
-      data = await this.fetchPage(url);
+      data = await this.fetchPage(url, filters);
     } catch (e) {
       if (pageNo === 1) {
-        data = await this.fetchPage(`${Booktoki.url}`);
+        data = await this.fetchPage(`${Booktoki.url}`, filters);
       } else {
         throw e;
       }
