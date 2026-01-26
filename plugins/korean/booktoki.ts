@@ -9,7 +9,7 @@ class Booktoki implements Plugin.PluginBase {
   name = '북토끼 (Booktoki)';
   icon = 'src/kr/booktoki/icon.png';
   site = 'https://booktoki469.com';
-  version = '1.9.6';
+  version = '1.9.7';
   static url: string | undefined;
 
   filters = {
@@ -91,6 +91,7 @@ class Booktoki implements Plugin.PluginBase {
       cmd: 'request.get',
       url,
       maxTimeout: 60000,
+      session: 'booktoki_fixed_session', // 세션 고정으로 브라우저 재사용
     });
     let lastError: any;
 
@@ -114,7 +115,7 @@ class Booktoki implements Plugin.PluginBase {
       return this.parseFlareSolverrResponse(await res.text());
     } catch (e: any) {
       throw new Error(
-        `FlareSolverr 연결 실패:\n1. fetchApi: ${lastError?.message || lastError}\n2. fetch: ${e?.message || e}\n주소: ${fsUrl}`,
+        `FlareSolverr 연결 실패:\n1. fetchApi: ${lastError?.message || lastError}\n2. fetch: ${e?.message || e}\n주소: ${fsUrl}\n(모바일망 사용 시 집 PC와 IP가 달라 FlareSolverr를 반드시 거쳐야 합니다.)`,
       );
     }
   }
