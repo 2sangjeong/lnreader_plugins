@@ -9,7 +9,7 @@ class Booktoki implements Plugin.PluginBase {
   name = '북토끼 (Booktoki)';
   icon = 'src/kr/booktoki/icon.png';
   site = 'https://booktoki469.com';
-  version = '1.9.0';
+  version = '1.9.6';
   static url: string | undefined;
 
   filters = {
@@ -129,10 +129,11 @@ class Booktoki implements Plugin.PluginBase {
 
     if (json.status === 'ok') {
       const cookies = json.solution?.cookies || [];
-      const cfClearance = cookies.find(
-        (c: any) => c.name === 'cf_clearance',
-      )?.value;
-      if (cfClearance) storage.set('booktoki_cf_clearance', cfClearance);
+      const cookieStr = cookies
+        .map((c: any) => `${c.name}=${c.value}`)
+        .join('; ');
+
+      if (cookieStr) storage.set('booktoki_full_cookies', cookieStr);
       if (json.solution?.userAgent)
         storage.set('booktoki_cached_ua', json.solution.userAgent);
 
@@ -142,7 +143,7 @@ class Booktoki implements Plugin.PluginBase {
   }
 
   private getCachedHeaders() {
-    const cfClearance = storage.get('booktoki_cf_clearance');
+    const fullCookies = storage.get('booktoki_full_cookies');
     const ua = storage.get('booktoki_cached_ua') || this.getUserAgent();
     const headers: Record<string, string> = {
       'Referer': `${Booktoki.url}/`,
@@ -151,13 +152,14 @@ class Booktoki implements Plugin.PluginBase {
         'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8',
       'Accept-Language': 'ko-KR,ko;q=0.9,en-US;q=0.8,en;q=0.7',
     };
-    if (cfClearance) headers['Cookie'] = `cf_clearance=${cfClearance}`;
+    if (fullCookies) headers['Cookie'] = fullCookies;
     return headers;
   }
 
   private async fetchPage(url: string, filters?: any) {
+    const cachedHeaders = this.getCachedHeaders();
     try {
-      const res = await fetchApi(url, { headers: this.getCachedHeaders() });
+      const res = await fetchApi(url, { headers: cachedHeaders });
       const body = await res.text();
       if (
         res.ok &&
@@ -167,7 +169,6 @@ class Booktoki implements Plugin.PluginBase {
         return { body };
       }
     } catch (e) {}
-
     return { body: await this.fetchViaFlareSolverr(url, filters) };
   }
 
@@ -233,7 +234,7 @@ class Booktoki implements Plugin.PluginBase {
     await this.checkUrl();
     const cleanPath = novelPath.split('?')[0];
     const url = `${Booktoki.url}/${cleanPath}?sst=wr_num&sod=asc`;
-    const body = await this.fetchViaFlareSolverr(url);
+    const { body } = await this.fetchPage(url);
     const loadedCheerio = parseHTML(body);
     const novelName = loadedCheerio('.view-title > span > b').text().trim();
     const novel: Plugin.SourceNovel = {
@@ -251,29 +252,53 @@ class Booktoki implements Plugin.PluginBase {
       const chapterUrl = nameEl.attr('href');
       if (chapterUrl && !seenPaths.has(chapterUrl)) {
         seenPaths.add(chapterUrl);
-        let fullTitle = nameEl.text().trim();
-        nameEl.find('span, img, i').remove();
-        let rawName = nameEl.text().trim();
-        let chapterNum =
-          parseInt(rawName.match(/(\d+)/)?.[1] || '0') ||
-          parseInt(
-            loadedCheerio(el)
-              .find('.wr-num')
-              .text()
-              .replace(/[^0-9]/g, ''),
-          ) ||
-          0;
+        const clone = nameEl.clone();
+        clone.find('span, i, b, em, img, small, strong, font').remove();
+        let rawName = '';
+        clone.contents().each((_, node) => {
+          if (node.type === 'text') rawName += node.data;
+        });
+        rawName = rawName.trim();
+
+        let chapterNum = 0;
+        let chapterName = rawName;
+        if (novelName && chapterName.startsWith(novelName)) {
+          chapterName = chapterName
+            .substring(novelName.length)
+            .replace(/^[-_.\s]+/, '')
+            .trim();
+        }
+
+        const hwMatch = chapterName.match(/(\d+)\s*(?:화|회|회차|장|부|편|권)/);
+        if (hwMatch) {
+          chapterNum = parseInt(hwMatch[1]);
+          const cutIdx = chapterName.indexOf(hwMatch[0]) + hwMatch[0].length;
+          chapterName = chapterName.substring(0, cutIdx).trim();
+        } else {
+          const numMatch = chapterName.match(/(\d+)/);
+          if (numMatch) chapterNum = parseInt(numMatch[1]);
+          else
+            chapterNum =
+              parseInt(
+                loadedCheerio(el)
+                  .find('.wr-num')
+                  .text()
+                  .replace(/[^0-9]/g, ''),
+              ) || 0;
+          chapterName = chapterName.replace(/\s+\d+$/, '').trim();
+        }
+
         if (
           chapterNum === 0 &&
-          (fullTitle.includes('공지') ||
+          (nameEl.text().includes('공지') ||
             loadedCheerio(el).find('.wr-num').text().includes('공지'))
         )
           return;
-        let chapterName =
-          novelName && rawName.includes(novelName)
-            ? rawName.replace(novelName, '').trim()
-            : rawName;
-        chapterName = chapterName.replace(/^[-_.\s]+/, '').trim() || fullTitle;
+        chapterName =
+          chapterName.replace(/^[-_.\s]+/, '').trim() ||
+          rawName ||
+          nameEl.text().trim();
+
         novel.chapters?.push({
           name: chapterName,
           path: chapterUrl.replace(`${Booktoki.url}/`, ''),
@@ -286,6 +311,7 @@ class Booktoki implements Plugin.PluginBase {
         });
       }
     });
+
     novel.chapters?.sort(
       (a, b) => (a.chapterNumber || 0) - (b.chapterNumber || 0),
     );
