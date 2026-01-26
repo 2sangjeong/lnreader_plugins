@@ -9,7 +9,7 @@ class Booktoki implements Plugin.PluginBase {
   name = '북토끼 (Booktoki)';
   icon = 'src/kr/booktoki/icon.png';
   site = 'https://booktoki469.com';
-  version = '1.8.0';
+  version = '1.8.1';
   static url: string | undefined;
 
   filters = {
@@ -279,96 +279,74 @@ class Booktoki implements Plugin.PluginBase {
   async parseNovel(novelPath: string): Promise<Plugin.SourceNovel> {
     await this.checkUrl();
     const cleanPath = novelPath.split('?')[0];
+
+    // sst=wr_num&sod=asc: 회차 번호 기준 오름차순 정렬
+    // 북토끼 상세 페이지는 보통 한 페이지에 모든 회차를 보여줌
+    const url = `${Booktoki.url}/${cleanPath}?sst=wr_num&sod=asc`;
+    const body = await this.fetchViaFlareSolverr(url);
+    const loadedCheerio = parseHTML(body);
+
+    const novelName = loadedCheerio('.view-title > span > b').text().trim();
     const novel: Plugin.SourceNovel = {
       path: novelPath,
-      name: '',
+      name: novelName,
+      cover: loadedCheerio('.view-img > img').attr('src'),
+      summary: loadedCheerio('.view-content:not([style])').text().trim(),
+      author: loadedCheerio('.view-content a').first().text().trim(),
       chapters: [],
     };
-    let page = 1;
-    let hasNextPage = true;
+
     const seenPaths = new Set<string>();
+    const items = loadedCheerio('ul.list-body > li.list-item');
 
-    // 최대 40페이지(약 4,000화)까지 탐색
-    while (hasNextPage && page <= 40) {
-      // sst=wr_num&sod=asc: 회차 번호 기준 오름차순 정렬
-      const url = `${Booktoki.url}/${cleanPath}?sst=wr_num&sod=asc&page=${page}`;
-      const { body } = await this.fetchPage(url);
-      const loadedCheerio = parseHTML(body);
+    items.each((i, el) => {
+      const nameEl = loadedCheerio(el).find('.wr-subject > a');
+      const chapterUrl = nameEl.attr('href');
+      const releaseTimeStr = loadedCheerio(el).find('.wr-date').text().trim();
+      const wrNumText = loadedCheerio(el).find('.wr-num').text().trim();
 
-      if (page === 1) {
-        novel.name = loadedCheerio('.view-title > span > b').text().trim();
-        novel.cover = loadedCheerio('.view-img > img').attr('src');
-        novel.summary = loadedCheerio('.view-content:not([style])')
-          .text()
-          .trim();
-        novel.author = loadedCheerio('.view-content a').first().text().trim();
-      }
+      if (chapterUrl && !seenPaths.has(chapterUrl)) {
+        seenPaths.add(chapterUrl);
 
-      const items = loadedCheerio('ul.list-body > li.list-item');
-      if (items.length === 0) {
-        hasNextPage = false;
-        break;
-      }
+        let fullTitle = nameEl.text().trim();
+        nameEl.find('span, img, i').remove();
+        let rawChapterName = nameEl.text().trim();
 
-      let addedInThisPage = 0;
-      items.each((i, el) => {
-        const nameEl = loadedCheerio(el).find('.wr-subject > a');
-        const chapterUrl = nameEl.attr('href');
-        const releaseTimeStr = loadedCheerio(el).find('.wr-date').text().trim();
-        const wrNumText = loadedCheerio(el).find('.wr-num').text().trim();
-
-        if (chapterUrl && !seenPaths.has(chapterUrl)) {
-          seenPaths.add(chapterUrl);
-
-          let fullTitle = nameEl.text().trim();
-          nameEl.find('span, img, i').remove();
-          let rawChapterName = nameEl.text().trim();
-
-          // 1. 번호 추출 로직 (제목 우선 -> wr-num 보조)
-          let chapterNum = 0;
-          const titleNumMatch = rawChapterName.match(/(\d+)/);
-          if (titleNumMatch) {
-            chapterNum = parseInt(titleNumMatch[1]);
-          } else {
-            chapterNum = parseInt(wrNumText.replace(/[^0-9]/g, '')) || 0;
-          }
-
-          // 공지사항 등 유효하지 않은 항목 필터링
-          if (
-            chapterNum === 0 &&
-            (fullTitle.includes('공지') || wrNumText.includes('공지'))
-          ) {
-            return;
-          }
-
-          // 이름 정제
-          let chapterName = rawChapterName;
-          if (novel.name && rawChapterName.includes(novel.name)) {
-            chapterName = rawChapterName.replace(novel.name, '').trim();
-          }
-          chapterName = chapterName.replace(/^[-_.\s]+/, '').trim();
-          if (!chapterName) chapterName = fullTitle;
-
-          novel.chapters?.push({
-            name: chapterName,
-            path: chapterUrl.replace(`${Booktoki.url}/`, ''),
-            releaseTime: releaseTimeStr.replace(/\./g, '-'),
-            chapterNumber: chapterNum,
-          });
-          addedInThisPage++;
+        // 번호 추출 (제목 우선 -> wr-num 보조)
+        let chapterNum = 0;
+        const titleNumMatch = rawChapterName.match(/(\d+)/);
+        if (titleNumMatch) {
+          chapterNum = parseInt(titleNumMatch[1]);
+        } else {
+          chapterNum = parseInt(wrNumText.replace(/[^0-9]/g, '')) || 0;
         }
-      });
 
-      // 다음 페이지 여부 확인 (pagination active 다음 요소 존재 여부)
-      const nextBtn = loadedCheerio('.pagination .active').next('li').find('a');
-      if (addedInThisPage === 0 || nextBtn.length === 0) {
-        hasNextPage = false;
-      } else {
-        page++;
+        // 공지사항 필터링
+        if (
+          chapterNum === 0 &&
+          (fullTitle.includes('공지') || wrNumText.includes('공지'))
+        ) {
+          return;
+        }
+
+        // 이름 정제
+        let chapterName = rawChapterName;
+        if (novelName && rawChapterName.includes(novelName)) {
+          chapterName = rawChapterName.replace(novelName, '').trim();
+        }
+        chapterName = chapterName.replace(/^[-_.\s]+/, '').trim();
+        if (!chapterName) chapterName = fullTitle;
+
+        novel.chapters?.push({
+          name: chapterName,
+          path: chapterUrl.replace(`${Booktoki.url}/`, ''),
+          releaseTime: releaseTimeStr.replace(/\./g, '-'),
+          chapterNumber: chapterNum,
+        });
       }
-    }
+    });
 
-    // 최종 정렬 (숫자 기준 오름차순: 1화, 2화...)
+    // 최종 숫자 정렬
     novel.chapters?.sort(
       (a, b) => (a.chapterNumber || 0) - (b.chapterNumber || 0),
     );
