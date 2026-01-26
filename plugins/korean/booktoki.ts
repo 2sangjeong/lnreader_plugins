@@ -9,7 +9,7 @@ class Booktoki implements Plugin.PluginBase {
   name = '북토끼 (Booktoki)';
   icon = 'src/kr/booktoki/icon.png';
   site = 'https://booktoki469.com';
-  version = '1.5.4';
+  version = '1.5.5';
   static url: string | undefined;
 
   filters = {
@@ -81,56 +81,74 @@ class Booktoki implements Plugin.PluginBase {
     url: string,
     filters?: any,
   ): Promise<string> {
-    const ua = this.getUserAgent();
     const { url: fsUrl, key } = this.getFlareSolverrSettings(filters);
-    try {
-      const headers: Record<string, string> = {
-        'Content-Type': 'application/json',
-      };
-      if (key) headers['X-API-Key'] = key;
+    const headers: Record<string, string> = {
+      'Content-Type': 'application/json',
+    };
+    if (key) headers['X-API-Key'] = key;
 
+    const payload = JSON.stringify({
+      cmd: 'request.get',
+      url,
+      maxTimeout: 60000,
+    });
+
+    let lastError: any;
+
+    // 시도 1: fetchApi (네이티브 네트워크, CORS 우회 가능)
+    try {
+      const res = await fetchApi(fsUrl, {
+        method: 'POST',
+        headers,
+        body: payload,
+      });
+      const body = await res.text();
+      return this.parseFlareSolverrResponse(body);
+    } catch (e: any) {
+      lastError = e;
+    }
+
+    // 시도 2: 전역 fetch (웹뷰 네트워크, 인증서 처리에 차이가 있을 수 있음)
+    try {
       const res = await fetch(fsUrl, {
         method: 'POST',
         headers,
-        body: JSON.stringify({
-          cmd: 'request.get',
-          url,
-          maxTimeout: 60000,
-        }),
+        body: payload,
       });
       const body = await res.text();
-      let json;
-      try {
-        json = JSON.parse(body);
-      } catch (e) {
-        throw new Error(
-          `FlareSolverr 응답이 JSON 형식이 아님: ${body.substring(0, 100)}`,
-        );
-      }
-
-      if (json.status === 'ok') {
-        const solutionBody = json.solution?.response || '';
-        // 'Just a moment...'는 확실한 차단 지표이지만, 실제 데이터가 있다면 오탐일 수 있음
-        if (
-          solutionBody.includes('Just a moment...') &&
-          !solutionBody.includes('webtoon-list') &&
-          !solutionBody.includes('post-row') &&
-          !solutionBody.includes('view-title')
-        ) {
-          throw new Error(
-            'FlareSolverr가 성공을 보고했으나, 응답 본문에 여전히 챌린지 페이지가 포함되어 있습니다.',
-          );
-        }
-        return solutionBody;
-      }
-      throw new Error(
-        json.message || `FlareSolverr 오류 (상태: ${json.status})`,
-      );
+      return this.parseFlareSolverrResponse(body);
     } catch (e: any) {
       throw new Error(
-        `FlareSolverr 우회 실패: ${e.message}\n설정 확인: ${fsUrl}`,
+        `FlareSolverr 연결 실패:\n1. fetchApi: ${lastError?.message || lastError}\n2. fetch: ${e?.message || e}\n주소: ${fsUrl}\n(https 인증서 또는 CORS 설정을 확인해주세요)`,
       );
     }
+  }
+
+  private parseFlareSolverrResponse(body: string): string {
+    let json;
+    try {
+      json = JSON.parse(body);
+    } catch (e) {
+      throw new Error(
+        `FlareSolverr 응답이 JSON 형식이 아님: ${body.substring(0, 100)}`,
+      );
+    }
+
+    if (json.status === 'ok') {
+      const solutionBody = json.solution?.response || '';
+      if (
+        solutionBody.includes('Just a moment...') &&
+        !solutionBody.includes('webtoon-list') &&
+        !solutionBody.includes('post-row') &&
+        !solutionBody.includes('view-title')
+      ) {
+        throw new Error(
+          'FlareSolverr가 성공을 보고했으나, 응답 본문에 여전히 챌린지 페이지가 포함되어 있습니다.',
+        );
+      }
+      return solutionBody;
+    }
+    throw new Error(json.message || `FlareSolverr 오류 (상태: ${json.status})`);
   }
 
   private getHeaders() {
