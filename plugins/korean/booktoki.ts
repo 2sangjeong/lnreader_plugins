@@ -6,21 +6,15 @@ class Booktoki implements Plugin.PluginBase {
   id = 'booktoki';
   name = '북토끼 (Booktoki)';
   icon = 'src/kr/booktoki/icon.png';
-  site = 'https://booktoki469.com'; // 최신 주소 확인
-  version = '1.3.5'; // 버전 업데이트
+  site = 'https://booktoki469.com';
+  version = '1.4.0'; // 구조 변경으로 버전 업
   static url: string | undefined;
-
-  // 🔴 [중요] 여기에 아까 WebView에서 복사한 "진짜 User-Agent"를 붙여넣으세요.
-  // 아래는 예시입니다. 본인의 폰 정보와 다르면 차단될 수 있습니다.
-  userAgent =
-    'Mozilla/5.0 (Linux; Android 10; K) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/144.0.0.0 Mobile Safari/537.36';
 
   async checkUrl() {
     if (!Booktoki.url) {
       try {
-        const res = await fetchApi(this.site, {
-          headers: { 'User-Agent': this.userAgent },
-        });
+        // User-Agent 설정 없이 요청 -> 앱 설정값 자동 사용
+        const res = await fetchApi(this.site);
         if (res.ok && !res.url.includes('survey-smiles.com')) {
           Booktoki.url = res.url.replace(/\/$/, '');
         } else {
@@ -35,18 +29,17 @@ class Booktoki implements Plugin.PluginBase {
   private getHeaders() {
     return {
       'Referer': `${Booktoki.url}/`,
-      'User-Agent': this.userAgent,
-      // 🔴 Cloudflare가 싫어하는 'Sec-Ch-Ua' 헤더들은 모두 삭제했습니다.
-      // 단순히 Referer와 User-Agent만 보내는 것이 통과 확률이 훨씬 높습니다.
+      // User-Agent를 삭제하여 App 설정을 따르게 함
+      'Accept':
+        'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8',
+      'Accept-Language': 'ko-KR,ko;q=0.9,en-US;q=0.8,en;q=0.7',
     };
   }
 
   private async fetchPage(url: string) {
-    // 헤더 적용
     const res = await fetchApi(url, { headers: this.getHeaders() });
     const body = await res.text();
 
-    // 차단 감지 로직
     if (
       res.status === 403 ||
       res.status === 503 ||
@@ -55,15 +48,13 @@ class Booktoki implements Plugin.PluginBase {
       body.includes('Just a moment...')
     ) {
       throw new Error(
-        `Cloudflare 차단됨 (Status: ${res.status})\n` +
-          `설정된 User-Agent와 실제 기기 정보가 달라서 차단되었습니다.\n` +
-          `WebView에서 'my user agent'를 검색해서 나온 값을 코드에 정확히 넣었는지 확인해주세요.`,
+        `Cloudflare 차단됨 (${res.status}):\n` +
+          `앱 설정의 User-Agent를 사용 중입니다.\n` +
+          `웹뷰(지구본)로 접속하여 '사람 확인'을 완료해주세요.`,
       );
     }
     return { res, body };
   }
-
-  // --- (아래 로직은 기존과 동일합니다) ---
 
   private decodeHtmlData(encoded: string): string {
     let result = '';
