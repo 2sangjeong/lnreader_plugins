@@ -9,12 +9,12 @@ class Booktoki implements Plugin.PluginBase {
   name = '북토끼 (Booktoki)';
   icon = 'src/kr/booktoki/icon.png';
   site = 'https://booktoki469.com';
-  version = '1.5.1';
+  version = '1.5.2';
   static url: string | undefined;
 
   filters = {
     flareSolverrUrl: {
-      label: 'FlareSolverr URL (Nginx/개인 도메인)',
+      label: 'FlareSolverr URL (끝에 /v1 포함 필수)',
       value: 'http://localhost:8191/v1',
       type: FilterTypes.TextInput,
     },
@@ -26,10 +26,16 @@ class Booktoki implements Plugin.PluginBase {
   } satisfies Filters;
 
   private getFlareSolverrSettings(filters?: any) {
-    const url =
+    let url =
       filters?.flareSolverrUrl?.value ||
       storage.get('booktoki_fs_url') ||
       'http://localhost:8191/v1';
+
+    // 자동 보정: 끝에 /v1이 없으면 추가
+    if (url && !url.endsWith('/v1') && !url.endsWith('/v1/')) {
+      url = url.replace(/\/$/, '') + '/v1';
+    }
+
     const key =
       filters?.flareSolverrKey?.value || storage.get('booktoki_fs_key') || '';
 
@@ -90,7 +96,6 @@ class Booktoki implements Plugin.PluginBase {
           cmd: 'request.get',
           url,
           maxTimeout: 60000,
-          userAgent: ua,
         }),
       });
       const body = await res.text();
@@ -99,14 +104,26 @@ class Booktoki implements Plugin.PluginBase {
         json = JSON.parse(body);
       } catch (e) {
         throw new Error(
-          ` FlareSolverr 응답 파싱 실패 (JSON 아님): ${body.substring(0, 100)}`,
+          `FlareSolverr 응답이 JSON 형식이 아님: ${body.substring(0, 100)}`,
         );
       }
 
       if (json.status === 'ok') {
-        return json.solution.response;
+        const solutionBody = json.solution?.response || '';
+        if (
+          solutionBody.includes('challenge-platform') ||
+          solutionBody.includes('Cloudflare') ||
+          solutionBody.includes('Just a moment...')
+        ) {
+          throw new Error(
+            'FlareSolverr가 챌린지를 해결했다고 보고했으나, 응답 본문에 여전히 차단 메시지가 포함되어 있습니다.',
+          );
+        }
+        return solutionBody;
       }
-      throw new Error(json.message || 'FlareSolverr failed');
+      throw new Error(
+        json.message || `FlareSolverr 오류 (상태: ${json.status})`,
+      );
     } catch (e: any) {
       throw new Error(
         `FlareSolverr 우회 실패: ${e.message}\n설정 확인: ${fsUrl}`,
