@@ -9,7 +9,7 @@ class Booktoki implements Plugin.PluginBase {
   name = '북토끼 (Booktoki)';
   icon = 'src/kr/booktoki/icon.png';
   site = 'https://booktoki469.com';
-  version = '1.9.9';
+  version = '1.9.10';
   static url: string | undefined;
 
   filters = {
@@ -26,6 +26,12 @@ class Booktoki implements Plugin.PluginBase {
     phpSessId: {
       label: 'Session Cookie (PHPSESSID)',
       value: storage.get('booktoki_phpsessid') || '',
+      type: FilterTypes.TextInput,
+    },
+    bookmarklet: {
+      label: '북마크 코드 (전체 복사하여 사용)',
+      value:
+        "javascript:(function(){const m=document.cookie.match(/PHPSESSID=([^;]+)/);if(m)prompt('PHPSESSID 복사',m[1]);else alert('PHPSESSID를 찾을 수 없습니다. 캡차를 먼저 풀어주세요.');})();",
       type: FilterTypes.TextInput,
     },
   } satisfies Filters;
@@ -168,13 +174,9 @@ class Booktoki implements Plugin.PluginBase {
         storage.set('booktoki_cached_ua', json.solution.userAgent);
 
       const response = json.solution?.response || '';
-      if (
-        response.includes('captcha_key') ||
-        response.includes('fcaptcha') ||
-        response.includes('숫자 입력')
-      ) {
+      if (this.isCaptcha(response)) {
         throw new Error(
-          '숫자 입력 캡차가 감지되었습니다.\n\n[모바일(안드로이드) 복사 방법]\n1. 브라우저에서 캡차 해결\n2. 아무 사이트나 북마크 추가 -> 이름: "쿠키 확인", URL: "javascript:prompt(\'PHPSESSID\', document.cookie.match(/PHPSESSID=[^;]+/))" 로 수정\n3. 북토끼 주소창에 "쿠키 확인" 입력 후 해당 북마크 실행\n4. 팝업창의 값을 길게 눌러 복사하세요.',
+          '숫자 캡차가 발생했습니다. [설정 -> Filter -> 북마크 코드]를 전체 복사하여 브라우저에서 실행한 후, PHPSESSID 값을 가져와 설정에 입력해 주세요.',
         );
       }
 
@@ -207,18 +209,35 @@ class Booktoki implements Plugin.PluginBase {
 
   private async fetchPage(url: string, filters?: any) {
     const cachedHeaders = this.getCachedHeaders();
+    let body = '';
     try {
       const res = await fetchApi(url, { headers: cachedHeaders });
-      const body = await res.text();
-      if (
-        res.ok &&
-        !body.includes('challenge-platform') &&
-        !body.includes('Just a moment...')
-      ) {
-        return { body };
+      body = await res.text();
+      if (res.ok && !this.isCaptcha(body)) {
+        if (
+          !body.includes('challenge-platform') &&
+          !body.includes('Just a moment...')
+        ) {
+          return { body };
+        }
       }
     } catch (e) {}
+
+    if (body && this.isCaptcha(body)) {
+      throw new Error(
+        "숫자 캡차가 발생했습니다. 상단 'WebView' 아이콘을 눌러 숫자를 입력하고 돌아와 주세요.",
+      );
+    }
+
     return { body: await this.fetchViaFlareSolverr(url, filters) };
+  }
+
+  private isCaptcha(body: string): boolean {
+    return (
+      body.includes('captcha_key') ||
+      body.includes('fcaptcha') ||
+      body.includes('숫자 입력')
+    );
   }
 
   private decodeHtmlData(encoded: string): string {
