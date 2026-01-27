@@ -9,7 +9,7 @@ class Booktoki implements Plugin.PluginBase {
   name = '북토끼 (Booktoki)';
   icon = 'src/kr/booktoki/icon.png';
   site = 'https://booktoki469.com';
-  version = '1.9.7';
+  version = '1.9.8';
   static url: string | undefined;
 
   filters = {
@@ -23,11 +23,17 @@ class Booktoki implements Plugin.PluginBase {
       value: '',
       type: FilterTypes.TextInput,
     },
+    phpSessId: {
+      label: 'Session Cookie (PHPSESSID)',
+      value: '',
+      type: FilterTypes.TextInput,
+    },
   } satisfies Filters;
 
   private getFlareSolverrSettings(filters?: any) {
     let url = filters?.flareSolverrUrl?.value || '';
     let key = filters?.flareSolverrKey?.value || '';
+    let phpSessId = filters?.phpSessId?.value || '';
 
     if (!url) {
       url = storage.get('booktoki_fs_url') || 'http://localhost:8191/v1';
@@ -41,10 +47,16 @@ class Booktoki implements Plugin.PluginBase {
       storage.set('booktoki_fs_key', key);
     }
 
+    if (!phpSessId) {
+      phpSessId = storage.get('booktoki_phpsessid') || '';
+    } else {
+      storage.set('booktoki_phpsessid', phpSessId);
+    }
+
     if (url && !url.endsWith('/v1') && !url.endsWith('/v1/')) {
       url = url.replace(/\/$/, '') + '/v1';
     }
-    return { url, key };
+    return { url, key, phpSessId };
   }
 
   private getUserAgent(): string {
@@ -81,17 +93,31 @@ class Booktoki implements Plugin.PluginBase {
     url: string,
     filters?: any,
   ): Promise<string> {
-    const { url: fsUrl, key } = this.getFlareSolverrSettings(filters);
+    const {
+      url: fsUrl,
+      key,
+      phpSessId,
+    } = this.getFlareSolverrSettings(filters);
     const headers: Record<string, string> = {
       'Content-Type': 'application/json',
     };
     if (key) headers['X-API-Key'] = key;
+
+    const cookies = [];
+    if (phpSessId) {
+      cookies.push({
+        name: 'PHPSESSID',
+        value: phpSessId,
+        domain: new URL(Booktoki.url || this.site).hostname,
+      });
+    }
 
     const payload = JSON.stringify({
       cmd: 'request.get',
       url,
       maxTimeout: 60000,
       session: 'booktoki_fixed_session', // 세션 고정으로 브라우저 재사용
+      cookies: cookies.length > 0 ? cookies : undefined,
     });
     let lastError: any;
 
@@ -138,13 +164,25 @@ class Booktoki implements Plugin.PluginBase {
       if (json.solution?.userAgent)
         storage.set('booktoki_cached_ua', json.solution.userAgent);
 
-      return json.solution?.response || '';
+      const response = json.solution?.response || '';
+      if (
+        response.includes('captcha_key') ||
+        response.includes('fcaptcha') ||
+        response.includes('숫자 입력')
+      ) {
+        throw new Error(
+          '숫자 입력 캡차가 감지되었습니다. 브라우저에서 캡차를 풀고 PHPSESSID 쿠키를 플러그인 설정에 입력해 주세요.',
+        );
+      }
+
+      return response;
     }
     throw new Error(json.message || `FlareSolverr 오류 (${json.status})`);
   }
 
   private getCachedHeaders() {
     const fullCookies = storage.get('booktoki_full_cookies');
+    const phpSessId = storage.get('booktoki_phpsessid');
     const ua = storage.get('booktoki_cached_ua') || this.getUserAgent();
     const headers: Record<string, string> = {
       'Referer': `${Booktoki.url}/`,
@@ -153,7 +191,14 @@ class Booktoki implements Plugin.PluginBase {
         'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8',
       'Accept-Language': 'ko-KR,ko;q=0.9,en-US;q=0.8,en;q=0.7',
     };
-    if (fullCookies) headers['Cookie'] = fullCookies;
+    if (fullCookies) {
+      headers['Cookie'] = fullCookies;
+      if (phpSessId && !fullCookies.includes('PHPSESSID')) {
+        headers['Cookie'] += `; PHPSESSID=${phpSessId}`;
+      }
+    } else if (phpSessId) {
+      headers['Cookie'] = `PHPSESSID=${phpSessId}`;
+    }
     return headers;
   }
 
