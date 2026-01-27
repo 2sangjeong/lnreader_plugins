@@ -9,23 +9,23 @@ class Booktoki implements Plugin.PluginBase {
   name = '북토끼 (Booktoki)';
   icon = 'src/kr/booktoki/icon.png';
   site = 'https://booktoki469.com';
-  version = '1.9.8';
+  version = '1.9.9';
   static url: string | undefined;
 
   filters = {
     flareSolverrUrl: {
       label: 'FlareSolverr URL (끝에 /v1 포함 필수)',
-      value: '',
+      value: storage.get('booktoki_fs_url') || 'http://localhost:8191/v1',
       type: FilterTypes.TextInput,
     },
     flareSolverrKey: {
       label: 'FlareSolverr API Key (X-API-Key 헤더)',
-      value: '',
+      value: storage.get('booktoki_fs_key') || '',
       type: FilterTypes.TextInput,
     },
     phpSessId: {
       label: 'Session Cookie (PHPSESSID)',
-      value: '',
+      value: storage.get('booktoki_phpsessid') || '',
       type: FilterTypes.TextInput,
     },
   } satisfies Filters;
@@ -39,18 +39,21 @@ class Booktoki implements Plugin.PluginBase {
       url = storage.get('booktoki_fs_url') || 'http://localhost:8191/v1';
     } else {
       storage.set('booktoki_fs_url', url);
+      this.filters.flareSolverrUrl.value = url;
     }
 
     if (!key) {
       key = storage.get('booktoki_fs_key') || '';
     } else {
       storage.set('booktoki_fs_key', key);
+      this.filters.flareSolverrKey.value = key;
     }
 
     if (!phpSessId) {
       phpSessId = storage.get('booktoki_phpsessid') || '';
     } else {
       storage.set('booktoki_phpsessid', phpSessId);
+      this.filters.phpSessId.value = phpSessId;
     }
 
     if (url && !url.endsWith('/v1') && !url.endsWith('/v1/')) {
@@ -171,7 +174,7 @@ class Booktoki implements Plugin.PluginBase {
         response.includes('숫자 입력')
       ) {
         throw new Error(
-          '숫자 입력 캡차가 감지되었습니다. 브라우저에서 캡차를 풀고 PHPSESSID 쿠키를 플러그인 설정에 입력해 주세요.',
+          '숫자 입력 캡차가 감지되었습니다.\n\n[모바일(안드로이드) 복사 방법]\n1. 브라우저에서 캡차 해결\n2. 아무 사이트나 북마크 추가 -> 이름: "쿠키 확인", URL: "javascript:prompt(\'PHPSESSID\', document.cookie.match(/PHPSESSID=[^;]+/))" 로 수정\n3. 북토끼 주소창에 "쿠키 확인" 입력 후 해당 북마크 실행\n4. 팝업창의 값을 길게 눌러 복사하세요.',
         );
       }
 
